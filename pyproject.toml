@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deriv-sdk"
+version = "0.1.0"
+description = "A modern asynchronous Python SDK for the Deriv API."
+readme = "README.md"
+requires-python = ">=3.11"
+
+authors = [
+    { name = "Samuel Tripple" }
+]
+
+license = { text = "MIT" }
+
+keywords = [
+    "deriv",
+    "trading",
+    "api",
+    "websocket",
+    "sdk",
+    "python"
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License"
+]
+
+dependencies = [
+    "httpx>=0.28.0",
+    "websockets>=15.0",
+    "python-dotenv>=1.1.0",
+    "pydantic>=2.11.0",
+    "structlog>=25.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy"
+]
+
+[tool.setuptools.packages.find]
+include = ["deriv_sdk*"]
