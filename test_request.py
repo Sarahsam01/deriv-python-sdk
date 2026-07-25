@@ -2,28 +2,28 @@ import asyncio
 
 from deriv_sdk.logger import configure_logger
 from deriv_sdk.transport.messages import PingRequest
-from deriv_sdk.transport.router import MessageRouter
 from deriv_sdk.transport.websocket import WebSocketClient
-
-
-def on_ping(message):
-    print("Router received:")
-    print(message)
 
 
 async def main():
     configure_logger()
 
-    router = MessageRouter()
-    router.register("ping", on_ping)
-
-    client = WebSocketClient(router=router)
+    client = WebSocketClient()
 
     await client.connect()
 
-    await client.send(PingRequest().to_dict())
+    print("Sending ping...")
 
-    await asyncio.sleep(5)
+    response = await client.request(
+        PingRequest().to_dict(),
+        expected="ping",
+    )
+
+    print()
+    print("Response received:")
+    print(response)
+
+    await asyncio.sleep(2)
 
     await client.disconnect()
 
