@@ -11,16 +11,30 @@ Responsibilities
 • Async iteration support
 • Clean unsubscribe
 
-Version : 2.0.0
+Version : 3.0.0
 ===========================================================
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Generic, TypeVar
+from typing import Any, Generic, Protocol, Self, TypeVar
 
 T = TypeVar("T")
+
+
+class WebSocketProtocol(Protocol):
+    """
+    Protocol describing the websocket interface required by
+    Subscription.
+    """
+
+    async def request(
+        self,
+        message: dict[str, Any],
+        *,
+        expected: str,
+    ) -> dict[str, Any]: ...
 
 
 class Subscription(Generic[T]):
@@ -36,9 +50,8 @@ class Subscription(Generic[T]):
     def __init__(
         self,
         subscription_id: str,
-        websocket,
+        websocket: WebSocketProtocol,
     ) -> None:
-
         self._subscription_id = subscription_id
         self._websocket = websocket
 
@@ -97,11 +110,9 @@ class Subscription(Generic[T]):
             expected="forget",
         )
 
-    def __aiter__(self):
+    def __aiter__(self) -> Self:
         """
-        Support:
-
-            async for item in subscription
+        Return this object as an asynchronous iterator.
         """
 
         return self
@@ -118,16 +129,19 @@ class Subscription(Generic[T]):
 
     def __len__(self) -> int:
         """
-        Current queue size.
+        Return the number of queued items.
         """
 
         return self._queue.qsize()
 
     def __repr__(self) -> str:
+        """
+        Developer-friendly representation.
+        """
+
         return (
             f"{self.__class__.__name__}("
             f"id={self._subscription_id!r}, "
             f"closed={self._closed}, "
-            f"queued={self._queue.qsize()}"
-            f")"
+            f"queued={self._queue.qsize()})"
         )

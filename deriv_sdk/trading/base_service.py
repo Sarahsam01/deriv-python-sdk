@@ -6,13 +6,14 @@ Base Trading Service
 
 Shared functionality for all trading services.
 
-Version : 3.0.0
+Version : 3.1.0
 ===========================================================
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any, Generic, TypeVar
 
 from deriv_sdk.transport.websocket import WebSocketClient
@@ -36,15 +37,31 @@ class BaseTradingService(ABC, Generic[T]):
     async def _execute(
         self,
         *,
-        payload: dict[str, object],
-        expected: str,
+        payload: Mapping[str, object],
+        expected: str | None = None,
     ) -> T:
         """
         Execute a request and return a typed model.
+
+        Parameters
+        ----------
+        payload
+            Request payload to send to the Deriv API.
+
+        expected
+            Expected API ``msg_type`` returned by the server.
+
+        Returns
+        -------
+        T
+            Parsed response model.
         """
 
+        if expected is None:
+            raise ValueError("'expected' must be provided.")
+
         response = await self._websocket.request(
-            message=payload,
+            message=dict(payload),
             expected=expected,
         )
 
@@ -58,3 +75,4 @@ class BaseTradingService(ABC, Generic[T]):
         """
         Convert the API response into a strongly typed model.
         """
+        raise NotImplementedError

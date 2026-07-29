@@ -14,13 +14,13 @@ Responsibilities
 • Request validation
 • Response validation
 
-Version : 2.5.0
+Version : 3.0.0
 ===========================================================
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from deriv_sdk.logger import get_logger
 from deriv_sdk.market.exceptions import MarketError
@@ -48,23 +48,60 @@ from deriv_sdk.streaming.subscription import Subscription
 from deriv_sdk.streaming.tick_stream import TickStream
 
 
+class WebSocketProtocol(Protocol):
+    """
+    Protocol describing the websocket interface required by
+    MarketService.
+    """
+
+    async def request(
+        self,
+        message: dict[str, Any],
+        *,
+        expected: str,
+    ) -> dict[str, Any]: ...
+
+
 class MarketService:
     """
     Provides access to Deriv market endpoints.
     """
 
-    def __init__(self, websocket) -> None:
+    def __init__(
+        self,
+        websocket: WebSocketProtocol,
+    ) -> None:
         self._websocket = websocket
 
         self._logger = get_logger(__name__)
 
-        # Shared subscription manager
         self._subscriptions = SubscriptionManager()
 
-        # Tick streaming service
         self._tick_stream = TickStream(
             websocket=self._websocket,
             manager=self._subscriptions,
+        )
+
+    # =====================================================
+    # Internal Helpers
+    # =====================================================
+
+    @staticmethod
+    def _raise_market_error(
+        response: dict[str, Any],
+    ) -> None:
+        """
+        Raise MarketError if the API response contains an error.
+        """
+
+        if "error" not in response:
+            return
+
+        error = response["error"]
+
+        raise MarketError(
+            f"{error.get('code', 'UnknownError')}: "
+            f"{error.get('message', 'Unknown error')}"
         )
 
     # =====================================================
@@ -79,34 +116,21 @@ class MarketService:
         Retrieve active trading symbols.
         """
 
-        request = ActiveSymbolsRequest(
+        payload = ActiveSymbolsRequest(
             brief=brief,
-        )
-
-        payload = request.to_dict()
+        ).to_dict()
 
         self._logger.debug(
             "Sending active_symbols request.",
             payload=payload,
         )
 
-        response: dict[str, Any] = await self._websocket.request(
+        response = await self._websocket.request(
             payload,
             expected="active_symbols",
         )
 
-        self._logger.debug(
-            "Received active_symbols response.",
-            response=response,
-        )
-
-        if "error" in response:
-            error = response["error"]
-
-            raise MarketError(
-                f"{error.get('code', 'UnknownError')}: "
-                f"{error.get('message', 'Unknown error')}"
-            )
+        self._raise_market_error(response)
 
         result = ActiveSymbolsResponse.model_validate(response)
 
@@ -135,49 +159,35 @@ class MarketService:
         Retrieve historical market data.
         """
 
-        request = TicksHistoryRequest(
+        payload = TicksHistoryRequest(
             ticks_history=symbol,
             count=count,
             start=start,
             end=end,
             granularity=granularity,
             style=style,
-        )
-
-        payload = request.to_dict()
+        ).to_dict()
 
         self._logger.debug(
             "Sending ticks_history request.",
             payload=payload,
         )
 
-        response: dict[str, Any] = await self._websocket.request(
+        response = await self._websocket.request(
             payload,
             expected="history",
         )
 
-        self._logger.debug(
-            "Received ticks_history response.",
-            response=response,
-        )
+        self._raise_market_error(response)
 
-        if "error" in response:
-            error = response["error"]
-
-            raise MarketError(
-                f"{error.get('code', 'UnknownError')}: "
-                f"{error.get('message', 'Unknown error')}"
-            )
-
-        result = TicksHistoryResponse.model_validate(response)
+        result = TicksHistoryResponse.parse_history(response)
 
         if isinstance(result, TickHistory):
             self._logger.info(
                 "Retrieved historical ticks.",
                 count=result.count,
             )
-
-        elif isinstance(result, CandleHistory):
+        else:
             self._logger.info(
                 "Retrieved historical candles.",
                 count=result.count,
@@ -197,39 +207,20 @@ class MarketService:
         Retrieve trading times.
         """
 
-        request = TradingTimesRequest(
+        payload = TradingTimesRequest(
             date=date,
-        )
+        ).to_dict()
 
-        payload = request.to_dict()
-
-        self._logger.debug(
-            "Sending trading_times request.",
-            payload=payload,
-        )
-
-        response: dict[str, Any] = await self._websocket.request(
+        response = await self._websocket.request(
             payload,
             expected="trading_times",
         )
 
-        self._logger.debug(
-            "Received trading_times response.",
-            response=response,
-        )
+        self._raise_market_error(response)
 
-        if "error" in response:
-            error = response["error"]
+        data = response.get("trading_times", response)
 
-            raise MarketError(
-                f"{error.get('code', 'UnknownError')}: "
-                f"{error.get('message', 'Unknown error')}"
-            )
-
-        if "trading_times" in response:
-            response = response["trading_times"]
-
-        result = TradingTimesResponse.model_validate(response)
+        result = TradingTimesResponse.model_validate(data)
 
         self._logger.info(
             "Retrieved trading times.",
@@ -253,41 +244,22 @@ class MarketService:
         Retrieve available contracts for a market symbol.
         """
 
-        request = ContractsForRequest(
+        payload = ContractsForRequest(
             symbol=symbol,
             currency=currency,
             product_type=product_type,
-        )
+        ).to_dict()
 
-        payload = request.to_dict()
-
-        self._logger.debug(
-            "Sending contracts_for request.",
-            payload=payload,
-        )
-
-        response: dict[str, Any] = await self._websocket.request(
+        response = await self._websocket.request(
             payload,
             expected="contracts_for",
         )
 
-        self._logger.debug(
-            "Received contracts_for response.",
-            response=response,
-        )
+        self._raise_market_error(response)
 
-        if "error" in response:
-            error = response["error"]
+        data = response.get("contracts_for", response)
 
-            raise MarketError(
-                f"{error.get('code', 'UnknownError')}: "
-                f"{error.get('message', 'Unknown error')}"
-            )
-
-        if "contracts_for" in response:
-            response = response["contracts_for"]
-
-        result = ContractsForResponse.model_validate(response)
+        result = ContractsForResponse.model_validate(data)
 
         self._logger.info(
             "Retrieved available contracts.",
@@ -325,12 +297,10 @@ class MarketService:
             True if the message was handled.
         """
 
-        msg_type = message.get("msg_type")
+        if message.get("msg_type") != "tick":
+            return False
 
-        if msg_type == "tick":
-            return await self._tick_stream.dispatch(message)
-
-        return False
+        return await self._tick_stream.dispatch(message)
 
     # =====================================================
     # Properties

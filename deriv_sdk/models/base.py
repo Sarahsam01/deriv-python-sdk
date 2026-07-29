@@ -6,16 +6,13 @@ Base Model
 
 Shared functionality for all SDK models.
 
-Version : 2.0.0
+Version : 2.1.0
 ===========================================================
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from typing import Any, Self, TypeVar
-
-T = TypeVar("T", bound="BaseModel")
+from typing import Any, Self
 
 
 class BaseModel:
@@ -42,6 +39,9 @@ class BaseModel:
 
     def to_dict(self) -> dict[str, Any]:
         """
-        Convert the model into a dictionary.
+        Convert this model into a dictionary.
+
+        Works for all SDK models that store their data as
+        instance attributes.
         """
-        return asdict(self)
+        return dict(vars(self))

@@ -9,6 +9,7 @@ from deriv_sdk.exceptions import TimeoutError
 # API Error Response
 # ==========================================================
 
+
 @pytest.mark.asyncio
 async def test_request_api_error(websocket):
     websocket._connection = AsyncMock()
@@ -44,6 +45,7 @@ async def test_request_api_error(websocket):
 # Unexpected Message Type
 # ==========================================================
 
+
 @pytest.mark.asyncio
 async def test_request_wrong_msg_type(websocket):
     websocket._connection = AsyncMock()
@@ -75,6 +77,7 @@ async def test_request_wrong_msg_type(websocket):
 # Timeout
 # ==========================================================
 
+
 @pytest.mark.asyncio
 async def test_request_timeout(websocket):
     websocket._connection = AsyncMock()
@@ -92,6 +95,7 @@ async def test_request_timeout(websocket):
 # Ping
 # ==========================================================
 
+
 @pytest.mark.asyncio
 async def test_ping(websocket):
     websocket._connection = AsyncMock()
@@ -107,6 +111,7 @@ async def test_ping(websocket):
 # ==========================================================
 # Close Alias
 # ==========================================================
+
 
 @pytest.mark.asyncio
 async def test_close(websocket):
@@ -126,6 +131,7 @@ async def test_close(websocket):
 # ==========================================================
 # __repr__
 # ==========================================================
+
 
 def test_repr(websocket):
     text = repr(websocket)

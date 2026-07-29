@@ -4,32 +4,61 @@ Deriv SDK
 
 Trade Manager
 
-Version : 1.0.0
+Coordinates the complete trading workflow.
+
+Responsibilities
+----------------
+1. Request a proposal
+2. Buy a contract
+3. Monitor the contract
+4. Return a TradeResult
+
+Version : 2.0.0
 ===========================================================
 """
 
 from __future__ import annotations
 
+from typing import Protocol
+
+from deriv_sdk.proposal_builder.models import Proposal
 from deriv_sdk.trade.models import TradeResult
+
+
+class ProposalServiceProtocol(Protocol):
+    """
+    Interface for the proposal service.
+    """
+
+    async def request(self, proposal: Proposal) -> object: ...
+
+
+class BuyServiceProtocol(Protocol):
+    """
+    Interface for the buy service.
+    """
+
+    async def buy(self, proposal: object) -> object: ...
+
+
+class ContractServiceProtocol(Protocol):
+    """
+    Interface for the contract monitoring service.
+    """
+
+    async def monitor(self, contract_id: int | str) -> TradeResult: ...
 
 
 class TradeManager:
     """
     High-level trading workflow.
-
-    Responsibilities
-    ----------------
-    1. Request proposal
-    2. Buy contract
-    3. Monitor contract
-    4. Return TradeResult
     """
 
     def __init__(
         self,
-        proposal_service,
-        buy_service,
-        contract_service,
+        proposal_service: ProposalServiceProtocol,
+        buy_service: BuyServiceProtocol,
+        contract_service: ContractServiceProtocol,
     ) -> None:
         self._proposal = proposal_service
         self._buy = buy_service
@@ -37,12 +66,11 @@ class TradeManager:
 
     async def execute(
         self,
-        proposal,
+        proposal: Proposal,
     ) -> TradeResult:
         """
         Execute a complete trade.
 
-        Implementation will be added in the next step.
+        This workflow will be implemented in a later version.
         """
-
-        raise NotImplementedError
+        raise NotImplementedError("Trade execution is not yet implemented.")

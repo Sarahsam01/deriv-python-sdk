@@ -9,11 +9,13 @@ Responsibilities
 • Parse active_symbols responses
 • Convert JSON into strongly typed models
 
-Version : 2.1.0
+Version : 3.0.0
 ===========================================================
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterator
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,10 +44,22 @@ class ActiveSymbolsResponse(BaseModel):
         return len(self.active_symbols)
 
     def __len__(self) -> int:
+        """
+        Number of active symbols.
+        """
         return self.count
 
-    def __iter__(self):
+    def items(self) -> Iterator[ActiveSymbol]:
+        """
+        Iterate over the active symbols.
+        """
         return iter(self.active_symbols)
 
-    def __getitem__(self, index: int) -> ActiveSymbol:
+    def __getitem__(
+        self,
+        index: int,
+    ) -> ActiveSymbol:
+        """
+        Return an active symbol by index.
+        """
         return self.active_symbols[index]

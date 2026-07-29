@@ -8,13 +8,16 @@ Responsibilities
 ----------------
 • Tick model
 • Tick stream model
-• Base streaming models
+• Historical tick models
 
-Version : 2.0.0
+Version : 3.0.0
 ===========================================================
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -32,13 +35,25 @@ class Tick(MarketModel):
 
     epoch: int = Field(description="Unix timestamp.")
 
-    id: str | None = Field(default=None, description="Tick identifier.")
+    id: str | None = Field(
+        default=None,
+        description="Tick identifier.",
+    )
 
-    pip_size: int | None = Field(default=None, description="Decimal precision.")
+    pip_size: int | None = Field(
+        default=None,
+        description="Decimal precision.",
+    )
 
-    ask: float | None = Field(default=None, description="Ask price.")
+    ask: float | None = Field(
+        default=None,
+        description="Ask price.",
+    )
 
-    bid: float | None = Field(default=None, description="Bid price.")
+    bid: float | None = Field(
+        default=None,
+        description="Bid price.",
+    )
 
     def __str__(self) -> str:
         return f"{self.symbol} {self.quote}"
@@ -46,7 +61,7 @@ class Tick(MarketModel):
 
 class TickResponse(MarketModel):
     """
-    Response returned by a tick subscription.
+    Response returned by a live tick subscription.
     """
 
     model_config = ConfigDict(
@@ -57,9 +72,9 @@ class TickResponse(MarketModel):
 
     msg_type: str
 
-    subscription: dict | None = None
+    subscription: dict[str, Any] | None = None
 
-    echo_req: dict | None = None
+    echo_req: dict[str, Any] | None = None
 
     req_id: int | None = None
 
@@ -76,18 +91,34 @@ class TickHistoryItem(MarketModel):
 
 class TickHistory(MarketModel):
     """
-    Historical tick collection.
+    Collection of historical ticks.
     """
 
     symbol: str
 
-    prices: list[TickHistoryItem] = Field(default_factory=list)
+    prices: list[TickHistoryItem] = Field(
+        default_factory=list,
+    )
 
     def __len__(self) -> int:
+        """
+        Number of historical ticks.
+        """
         return len(self.prices)
 
-    def __iter__(self):
+    def items(
+        self,
+    ) -> Iterator[TickHistoryItem]:
+        """
+        Iterate over the tick history items.
+        """
         return iter(self.prices)
 
-    def __getitem__(self, index: int):
+    def __getitem__(
+        self,
+        index: int,
+    ) -> TickHistoryItem:
+        """
+        Retrieve a historical tick by index.
+        """
         return self.prices[index]

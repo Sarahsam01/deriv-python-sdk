@@ -6,7 +6,7 @@ Client
 
 Main SDK entry point.
 
-Version : 0.6.0
+Version : 1.0.0
 ===========================================================
 """
 
@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .auth.models import Account
 from .config import SDKConfig
 from .version import __version__
 
@@ -30,37 +31,43 @@ if TYPE_CHECKING:
 @dataclass(slots=True)
 class DerivClient:
     """
-    Main SDK client.
+    Main entry point for the Deriv SDK.
 
-    Acts as the primary entry point to all SDK services.
+    This class owns the WebSocket connection and exposes all
+    SDK services through a single interface.
     """
 
     config: SDKConfig = field(default_factory=SDKConfig)
 
+    #
+    # Transport
+    #
+
     websocket: WebSocketClient = field(init=False)
 
     #
-    # Core Services
+    # Core services
     #
 
     auth: AuthService = field(init=False)
-
     market: MarketService = field(init=False)
 
     #
-    # Trading Services
+    # Trading services
     #
 
     proposal: ProposalService = field(init=False)
-
     buy: BuyService = field(init=False)
-
     contract: ContractService = field(init=False)
 
     def __post_init__(self) -> None:
         """
-        Initialize the SDK transport and services.
+        Initialize the SDK transport layer and all services.
         """
+
+        #
+        # Deferred imports prevent circular dependencies.
+        #
 
         from .auth.service import AuthService
         from .market.service import MarketService
@@ -73,41 +80,39 @@ class DerivClient:
         # Transport
         #
 
-        self.websocket = WebSocketClient(
-            self.config,
-        )
+        self.websocket = WebSocketClient(self.config)
 
         #
-        # Core Services
+        # Core services
         #
 
         self.auth = AuthService(
-            self.websocket,
-            self.config,
+            websocket=self.websocket,
+            config=self.config,
         )
 
         self.market = MarketService(
-            self.websocket,
+            websocket=self.websocket,
         )
 
         #
-        # Trading Services
+        # Trading services
         #
 
         self.proposal = ProposalService(
-            self.websocket,
+            websocket=self.websocket,
         )
 
         self.buy = BuyService(
-            self.websocket,
+            websocket=self.websocket,
         )
 
         self.contract = ContractService(
-            self.websocket,
+            websocket=self.websocket,
         )
 
         #
-        # Register streaming handlers
+        # Register streaming callbacks
         #
 
         self.websocket.register_market_service(
@@ -117,21 +122,21 @@ class DerivClient:
     @property
     def version(self) -> str:
         """
-        Return the SDK version.
+        SDK version.
         """
         return __version__
 
     @property
     def connected(self) -> bool:
         """
-        Return True if connected.
+        Whether the WebSocket connection is active.
         """
         return self.websocket.connected
 
     @property
     def authorized(self) -> bool:
         """
-        Return True if authorized.
+        Whether the client has been authenticated.
         """
         return self.auth.authorized
 
@@ -147,17 +152,43 @@ class DerivClient:
         """
         await self.websocket.disconnect()
 
-    async def authorize(self):
+    async def authorize(self) -> Account:
         """
-        Authorize using the configured API token.
+        Authenticate using the configured API token.
+
+        Returns
+        -------
+        Account
+            The authenticated Deriv account.
         """
         return await self.auth.authorize()
 
     async def close(self) -> None:
         """
-        Alias for disconnect().
+        Close the SDK client.
+
+        This is an alias for :meth:`disconnect`.
         """
         await self.disconnect()
+
+    async def __aenter__(self) -> DerivClient:
+        """
+        Support asynchronous context management.
+        """
+        await self.connect()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> None:
+        """
+        Ensure the connection is closed when leaving an
+        async context manager.
+        """
+        await self.close()
 
     def __repr__(self) -> str:
         """

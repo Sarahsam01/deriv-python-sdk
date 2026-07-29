@@ -11,18 +11,32 @@ Responsibilities
 • Register subscriptions
 • Route streamed ticks
 
-Version : 2.0.0
+Version : 3.0.0
 ===========================================================
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from deriv_sdk.logger import get_logger
 from deriv_sdk.streaming.manager import SubscriptionManager
 from deriv_sdk.streaming.models import Tick, TickResponse
 from deriv_sdk.streaming.subscription import Subscription
+
+
+class WebSocketProtocol(Protocol):
+    """
+    Protocol describing the websocket interface required by
+    TickStream.
+    """
+
+    async def request(
+        self,
+        message: dict[str, Any],
+        *,
+        expected: str,
+    ) -> dict[str, Any]: ...
 
 
 class TickStream:
@@ -32,10 +46,9 @@ class TickStream:
 
     def __init__(
         self,
-        websocket,
+        websocket: WebSocketProtocol,
         manager: SubscriptionManager,
     ) -> None:
-
         self._websocket = websocket
         self._manager = manager
 
@@ -56,6 +69,7 @@ class TickStream:
         Returns
         -------
         Subscription[Tick]
+            Live tick subscription.
         """
 
         payload = {
@@ -68,28 +82,26 @@ class TickStream:
             symbol=symbol,
         )
 
-        response: dict[str, Any] = await self._websocket.request(
+        response = await self._websocket.request(
             payload,
             expected="tick",
         )
 
-        tick_response = TickResponse.model_validate(
-            response,
-        )
+        tick_response = TickResponse.model_validate(response)
 
         subscription_data = tick_response.subscription
 
         if subscription_data is None or "id" not in subscription_data:
             raise RuntimeError("Deriv did not return a subscription ID.")
 
+        subscription_id = str(subscription_data["id"])
+
         subscription = Subscription[Tick](
-            subscription_id=subscription_data["id"],
+            subscription_id=subscription_id,
             websocket=self._websocket,
         )
 
-        self._manager.register(
-            subscription,
-        )
+        self._manager.register(subscription)
 
         await subscription.put(
             tick_response.tick,
@@ -108,25 +120,25 @@ class TickStream:
         message: dict[str, Any],
     ) -> bool:
         """
-        Dispatch a streamed tick message to
-        its subscription.
+        Dispatch a streamed tick message to its subscription.
+
+        Returns
+        -------
+        bool
+            True if a subscription handled the tick.
         """
 
-        subscription = message.get(
-            "subscription",
-            {},
-        )
+        subscription = message.get("subscription")
 
-        subscription_id = subscription.get(
-            "id",
-        )
-
-        if subscription_id is None:
+        if not isinstance(subscription, dict):
             return False
 
-        tick = TickResponse.model_validate(
-            message,
-        ).tick
+        subscription_id = subscription.get("id")
+
+        if not isinstance(subscription_id, str):
+            return False
+
+        tick = TickResponse.model_validate(message).tick
 
         return await self._manager.dispatch(
             subscription_id,

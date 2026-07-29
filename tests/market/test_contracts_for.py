@@ -37,6 +37,7 @@ class MockWebSocket:
 # Request
 # ==========================================================
 
+
 def test_contracts_for_request_defaults():
 
     request = ContractsForRequest(
@@ -67,6 +68,7 @@ def test_contracts_for_request_currency():
 # Response
 # ==========================================================
 
+
 def test_contracts_for_response():
 
     response = {
@@ -94,6 +96,7 @@ def test_contracts_for_response():
 # ==========================================================
 # Service
 # ==========================================================
+
 
 @pytest.mark.asyncio
 async def test_contracts_for_service():

@@ -10,7 +10,7 @@ Responsibilities
 • Validate proposal fields
 • Produce Proposal models
 
-Version : 1.0.0
+Version : 2.0.0
 ===========================================================
 """
 
@@ -22,18 +22,6 @@ from .models import Proposal
 class ProposalBuilder:
     """
     Fluent builder for Deriv proposal requests.
-
-    Example
-    -------
-    proposal = (
-        ProposalBuilder()
-        .symbol("R_100")
-        .rise()
-        .stake(1)
-        .duration(5)
-        .currency("USD")
-        .build()
-    )
     """
 
     def __init__(self) -> None:
@@ -49,11 +37,11 @@ class ProposalBuilder:
         """
 
         self._amount: float | None = None
-        self._basis: str = "stake"
+        self._basis = "stake"
         self._contract_type: str | None = None
-        self._currency: str = "USD"
+        self._currency = "USD"
         self._duration: int | None = None
-        self._duration_unit: str = "t"
+        self._duration_unit = "t"
         self._symbol: str | None = None
         self._barrier: str | None = None
         self._prediction: int | None = None
@@ -137,18 +125,12 @@ class ProposalBuilder:
         self._barrier = str(barrier)
         return self
 
-    def digit_match(
-        self,
-        prediction: int,
-    ) -> ProposalBuilder:
+    def digit_match(self, prediction: int) -> ProposalBuilder:
         self._contract_type = "DIGITMATCH"
         self._prediction = prediction
         return self
 
-    def digit_differs(
-        self,
-        prediction: int,
-    ) -> ProposalBuilder:
+    def digit_differs(self, prediction: int) -> ProposalBuilder:
         self._contract_type = "DIGITDIFF"
         self._prediction = prediction
         return self
@@ -158,7 +140,6 @@ class ProposalBuilder:
     # =====================================================
 
     def _validate(self) -> None:
-
         if self._symbol is None:
             raise ValueError("Symbol is required.")
 
@@ -171,21 +152,34 @@ class ProposalBuilder:
         if self._duration is None:
             raise ValueError("Duration is required.")
 
-        if self._prediction is not None:
-
-            if not 0 <= self._prediction <= 9:
-                raise ValueError(
-                    "Prediction must be between 0 and 9."
-                )
+        if self._prediction is not None and not 0 <= self._prediction <= 9:
+            raise ValueError("Prediction must be between 0 and 9.")
 
         if self._barrier is not None:
-
             barrier = int(self._barrier)
-
             if not 0 <= barrier <= 9:
-                raise ValueError(
-                    "Barrier must be between 0 and 9."
-                )
+                raise ValueError("Barrier must be between 0 and 9.")
+
+    def _required_fields(self) -> tuple[float, str, int, str]:
+        """
+        Return validated non-optional fields.
+
+        This helper narrows the optional builder state into concrete
+        values for static type checkers.
+        """
+        self._validate()
+
+        assert self._amount is not None
+        assert self._contract_type is not None
+        assert self._duration is not None
+        assert self._symbol is not None
+
+        return (
+            self._amount,
+            self._contract_type,
+            self._duration,
+            self._symbol,
+        )
 
     # =====================================================
     # Build
@@ -196,16 +190,16 @@ class ProposalBuilder:
         Build a validated Proposal model.
         """
 
-        self._validate()
+        amount, contract_type, duration, symbol = self._required_fields()
 
         proposal = Proposal(
-            amount=self._amount,
+            amount=amount,
             basis=self._basis,
-            contract_type=self._contract_type,
+            contract_type=contract_type,
             currency=self._currency,
-            duration=self._duration,
+            duration=duration,
             duration_unit=self._duration_unit,
-            symbol=self._symbol,
+            symbol=symbol,
             barrier=self._barrier,
             prediction=self._prediction,
         )

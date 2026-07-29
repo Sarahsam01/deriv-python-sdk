@@ -6,7 +6,7 @@ Market Package
 
 Exports all public market interfaces.
 
-Version : 2.3.0
+Version : 2.4.0
 ===========================================================
 """
 
@@ -17,6 +17,7 @@ from .models import (
     CandleHistory,
     TickHistory,
 )
+from .responses import TicksHistoryResponse
 from .service import MarketService
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "TickHistory",
     "Candle",
     "CandleHistory",
+    "TicksHistoryResponse",
 ]

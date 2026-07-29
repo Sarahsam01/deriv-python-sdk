@@ -6,7 +6,7 @@ Logger
 
 Provides structured logging for the SDK.
 
-Version : 0.1.0
+Version : 2.0.0
 ===========================================================
 """
 
@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import cast
 
 import structlog
+from structlog.stdlib import BoundLogger
 
 
 def configure_logger(level: int = logging.INFO) -> None:
@@ -45,18 +47,18 @@ def configure_logger(level: int = logging.INFO) -> None:
     )
 
 
-def get_logger(name: str):
+def get_logger(name: str) -> BoundLogger:
     """
-    Return a configured logger.
+    Return a configured structured logger.
 
     Parameters
     ----------
-    name : str
+    name:
         Logger name.
 
     Returns
     -------
-    structlog.stdlib.BoundLogger
+    BoundLogger
         Configured logger instance.
     """
-    return structlog.get_logger(name)
+    return cast(BoundLogger, structlog.get_logger(name))

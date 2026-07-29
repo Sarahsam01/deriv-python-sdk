@@ -38,6 +38,7 @@ class MockWebSocket:
 # Active Symbols
 # ==========================================================
 
+
 @pytest.mark.asyncio
 async def test_active_symbols_success():
 
@@ -66,14 +67,13 @@ async def test_active_symbols_success():
 
     assert ws.last_expected == "active_symbols"
 
-    assert ws.last_payload == {
-        "active_symbols": "brief"
-    }
+    assert ws.last_payload == {"active_symbols": "brief"}
 
 
 # ==========================================================
 # Tick History
 # ==========================================================
+
 
 @pytest.mark.asyncio
 async def test_tick_history_success():
@@ -104,6 +104,7 @@ async def test_tick_history_success():
 # Candle History
 # ==========================================================
 
+
 @pytest.mark.asyncio
 async def test_candle_history_success():
 
@@ -130,6 +131,20 @@ async def test_candle_history_success():
     )
 
     assert isinstance(candles, CandleHistory)
+    assert candles.count == 1
+    assert candles.candles[0].close == 100.5
+
+    ws = MockWebSocket(response)
+
+    service = MarketService(ws)
+
+    candles = await service.ticks_history(
+        "R_100",
+        style="candles",
+        granularity=60,
+    )
+
+    assert isinstance(candles, CandleHistory)
 
     assert candles.count == 1
 
@@ -139,6 +154,7 @@ async def test_candle_history_success():
 # ==========================================================
 # API Errors
 # ==========================================================
+
 
 @pytest.mark.asyncio
 async def test_market_error():

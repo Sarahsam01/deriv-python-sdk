@@ -189,9 +189,7 @@ class Contract(MarketModel):
     Represents a contract available for a market symbol.
     """
 
-    contract_type: str = Field(
-        description="Internal contract type."
-    )
+    contract_type: str = Field(description="Internal contract type.")
 
     contract_display: str | None = Field(
         default=None,

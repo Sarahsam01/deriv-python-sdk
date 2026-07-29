@@ -10,16 +10,37 @@ Responsibilities
 • Store authenticated account
 • Expose authorization status
 
-Version : 0.2.0
+Version : 1.0.0
 ===========================================================
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from deriv_sdk.auth.models import Account, AuthorizeResponse
 from deriv_sdk.transport.messages import AuthorizeRequest
+
+
+class WebSocketProtocol(Protocol):
+    """
+    Protocol describing the websocket interface required by AuthService.
+    """
+
+    async def request(
+        self,
+        message: dict[str, Any],
+        *,
+        expected: str,
+    ) -> dict[str, Any]: ...
+
+
+class ConfigProtocol(Protocol):
+    """
+    Protocol describing the configuration required by AuthService.
+    """
+
+    api_token: str
 
 
 class AuthService:
@@ -27,7 +48,11 @@ class AuthService:
     Authentication service.
     """
 
-    def __init__(self, websocket, config) -> None:
+    def __init__(
+        self,
+        websocket: WebSocketProtocol,
+        config: ConfigProtocol,
+    ) -> None:
         self._websocket = websocket
         self._config = config
 

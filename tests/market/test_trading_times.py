@@ -36,6 +36,7 @@ class MockWebSocket:
 # Request
 # ==========================================================
 
+
 def test_trading_times_request_default():
 
     request = TradingTimesRequest()
@@ -59,6 +60,7 @@ def test_trading_times_request_date():
 # ==========================================================
 # Response
 # ==========================================================
+
 
 def test_trading_times_response():
 
@@ -92,18 +94,13 @@ def test_trading_times_response():
     assert len(result.markets) == 1
     assert result.markets[0].name == "Synthetic Indices"
     assert result.markets[0].submarkets[0].name == "Random"
-    assert (
-        result.markets[0]
-        .submarkets[0]
-        .symbols[0]
-        .symbol
-        == "R_100"
-    )
+    assert result.markets[0].submarkets[0].symbols[0].symbol == "R_100"
 
 
 # ==========================================================
 # Service
 # ==========================================================
+
 
 @pytest.mark.asyncio
 async def test_trading_times_service():

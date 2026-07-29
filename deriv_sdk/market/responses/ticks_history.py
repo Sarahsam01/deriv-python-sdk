@@ -10,48 +10,39 @@ Version : 2.0.0
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from deriv_sdk.market.models import CandleHistory, TickHistory
 
 
-class TicksHistoryResponse(TickHistory):
-    """
-    Response returned by the Deriv API when style="ticks".
-    """
-
-    model_config = ConfigDict(
-        extra="ignore",
-    )
-
-    history: TickHistory | None = None
-    candles: CandleHistory | None = None
+class TicksHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
 
     @classmethod
-    def model_validate(cls, obj, *args, **kwargs):
+    def parse_history(
+        cls,
+        obj: Any,
+    ) -> TickHistory | CandleHistory:
         """
-        Normalize Deriv API responses.
-
-        Tick response:
-            {
-                "history": {
-                    "prices": [...],
-                    "times": [...]
-                }
-            }
-
-        Candle response:
-            {
-                "candles": [...]
-            }
+        Parse a Deriv ticks_history response.
         """
 
-        if "history" in obj:
-            return TickHistory.model_validate(obj["history"])
+        if not isinstance(obj, dict):
+            raise TypeError("Expected a dictionary.")
 
+        # Tick history
+        history = obj.get("history")
+        if isinstance(history, dict):
+            if "prices" in history:
+                return TickHistory.model_validate(history)
+
+            if "candles" in history:
+                return CandleHistory.model_validate(history)
+
+        # Candle history (top-level)
         if "candles" in obj:
-            return CandleHistory.model_validate(
-                {"candles": obj["candles"]}
-            )
+            return CandleHistory.model_validate(obj)
 
-        return super().model_validate(obj, *args, **kwargs)
+        raise ValueError("Response does not contain tick or candle history.")

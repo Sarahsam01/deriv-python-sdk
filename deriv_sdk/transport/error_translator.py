@@ -4,7 +4,7 @@ Deriv SDK
 
 API Error Translator
 
-Version : 1.0.0
+Version : 1.1.0
 ===========================================================
 """
 
@@ -30,10 +30,10 @@ def translate_api_error(
     Translate a Deriv API error into a typed SDK exception.
     """
 
-    code = error.get("code")
-    message = error.get("message", "Unknown API error.")
+    code = str(error.get("code", ""))
+    message = str(error.get("message", "Unknown API error."))
 
-    mapping = {
+    mapping: dict[str, type[APIError]] = {
         "InvalidToken": AuthenticationError,
         "AuthorizationRequired": AuthorizationError,
         "RateLimit": RateLimitError,
@@ -42,7 +42,7 @@ def translate_api_error(
         "InvalidContract": ContractError,
     }
 
-    exception_cls = mapping.get(code, APIError)
+    exception_cls: type[APIError] = mapping.get(code, APIError)
 
     return exception_cls(
         message,

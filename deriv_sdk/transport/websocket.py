@@ -6,15 +6,14 @@ WebSocket Transport
 
 Responsibilities
 ----------------
-• Manage WebSocket connection
-• Send JSON requests
-• Receive JSON responses
+• Manage WebSocket connections
+• Send and receive JSON messages
 • Correlate request/response pairs
-• Manage heartbeat
 • Route streaming messages
-• Dispatch router events
+• Manage heartbeat
+• Provide an async transport layer for SDK services
 
-Version : 5.0.0
+Version : 6.0.0
 ===========================================================
 """
 
@@ -23,7 +22,8 @@ from __future__ import annotations
 import asyncio
 import builtins
 import json
-from typing import Any, Self
+from types import TracebackType
+from typing import Any, Protocol, Self
 
 import websockets
 from websockets.asyncio.client import ClientConnection
@@ -36,9 +36,34 @@ from deriv_sdk.transport.heartbeat import Heartbeat
 from deriv_sdk.transport.router import MessageRouter
 
 
+class MarketServiceProtocol(Protocol):
+    """
+    Interface implemented by the market service for
+    processing streaming subscription messages.
+    """
+
+    async def dispatch_stream(
+        self,
+        message: dict[str, Any],
+    ) -> bool:
+        """
+        Process a streaming message.
+
+        Returns
+        -------
+        bool
+            True if the message was handled.
+        """
+        ...
+
+
 class WebSocketClient:
     """
-    Low-level transport layer for the Deriv WebSocket API.
+    Low-level asynchronous WebSocket transport.
+
+    This class owns the WebSocket connection and provides
+    request/response correlation together with streaming
+    message dispatch.
     """
 
     def __init__(
@@ -50,22 +75,38 @@ class WebSocketClient:
         self._logger = get_logger(__name__)
 
         self._config = config or SDKConfig()
+
         self._router = router or MessageRouter()
 
         self._connection: ClientConnection | None = None
-        self._receiver_task: asyncio.Task | None = None
+
+        self._receiver_task: asyncio.Task[None] | None = None
 
         self._heartbeat = Heartbeat(self.send)
 
         self._connected = False
 
-        self._market = None
+        self._market: MarketServiceProtocol | None = None
 
-        self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
+        self._pending: dict[
+            int,
+            asyncio.Future[dict[str, Any]],
+        ] = {}
 
         self._next_req_id = 1
 
         self._request_lock = asyncio.Lock()
+
+    def __repr__(self) -> str:
+        """
+        Return a developer-friendly representation of the client.
+        """
+        return (
+            f"{self.__class__.__name__}("
+            f"connected={self.connected}, "
+            f"pending={len(self._pending)}"
+            f")"
+        )
 
     # =====================================================
     # Properties
@@ -73,25 +114,40 @@ class WebSocketClient:
 
     @property
     def connected(self) -> bool:
+        """
+        Whether the transport is connected.
+        """
         return self._connected
 
     @property
     def websocket(self) -> ClientConnection | None:
+        """
+        Active websocket connection.
+        """
         return self._connection
 
     @property
     def router(self) -> MessageRouter:
+        """
+        Message router used by the transport.
+        """
         return self._router
-        # =====================================================
+
+    # =====================================================
     # Registration
     # =====================================================
 
-    def register_market_service(self, market: Any) -> None:
+    def register_market_service(
+        self,
+        market: MarketServiceProtocol,
+    ) -> None:
         """
         Register the market service responsible for
-        processing streaming subscription messages.
+        streaming subscription messages.
         """
+
         self._market = market
+
         self._logger.debug("Market service registered.")
 
     # =====================================================
@@ -100,16 +156,20 @@ class WebSocketClient:
 
     def _allocate_req_id(self) -> int:
         """
-        Allocate a unique request ID.
+        Allocate a unique request identifier.
         """
+
         req_id = self._next_req_id
+
         self._next_req_id += 1
+
         return req_id
 
     def _cancel_pending(self) -> None:
         """
-        Cancel all pending request futures.
+        Cancel every outstanding request future.
         """
+
         for future in self._pending.values():
             if not future.done():
                 future.cancel()
@@ -124,27 +184,36 @@ class WebSocketClient:
         Dispatch a streaming message to the registered
         market service.
 
-        Returns True if the message was handled.
+        Returns
+        -------
+        bool
+            True if the message was handled.
         """
+
         if self._market is None:
             return False
 
         if "subscription" not in message:
             return False
 
-        return await self._market.dispatch_stream(message)
+        return await self._market.dispatch_stream(
+            message,
+        )
+        # =====================================================
 
-    # =====================================================
     # Connection Management
     # =====================================================
 
     async def connect(self) -> None:
         """
-        Establish a WebSocket connection.
+        Establish a connection to the Deriv WebSocket API.
+
+        This method starts the heartbeat task and the
+        background receiver loop.
         """
 
         if self._connected:
-            self._logger.debug("Already connected.")
+            self._logger.debug("WebSocket already connected.")
             return
 
         self._logger.info(
@@ -158,6 +227,8 @@ class WebSocketClient:
 
         self._connected = True
 
+        self._logger.info("Connection established.")
+
         await self._heartbeat.start()
 
         self._receiver_task = asyncio.create_task(
@@ -165,11 +236,12 @@ class WebSocketClient:
             name="deriv-websocket-receiver",
         )
 
-        self._logger.info("Connected successfully.")
-
     async def disconnect(self) -> None:
         """
-        Close the WebSocket connection.
+        Close the WebSocket connection and stop all
+        background tasks.
+
+        Safe to call multiple times.
         """
 
         if not self._connected:
@@ -177,31 +249,55 @@ class WebSocketClient:
 
         self._connected = False
 
+        #
+        # Stop heartbeat
+        #
+
         try:
             await self._heartbeat.stop()
+
         except Exception:
-            self._logger.exception("Failed stopping heartbeat.")
+            self._logger.exception("Failed to stop heartbeat.")
+
+        #
+        # Stop receiver
+        #
 
         if self._receiver_task is not None:
             self._receiver_task.cancel()
 
             try:
                 await self._receiver_task
+
             except asyncio.CancelledError:
                 pass
+
             finally:
                 self._receiver_task = None
+
+        #
+        # Close websocket
+        #
 
         if self._connection is not None:
             try:
                 await self._connection.close()
+
+            except Exception:
+                self._logger.exception("Failed to close websocket.")
+
             finally:
                 self._connection = None
+
+        #
+        # Cancel pending requests
+        #
 
         self._cancel_pending()
 
         self._logger.info("Disconnected.")
-            # =====================================================
+        # =====================================================
+
     # Sending
     # =====================================================
 
@@ -210,15 +306,22 @@ class WebSocketClient:
         message: dict[str, Any],
     ) -> None:
         """
-        Send a JSON message over the websocket.
+        Send a JSON message over the WebSocket.
+
+        Parameters
+        ----------
+        message
+            JSON-serializable request payload.
         """
 
-        if self._connection is None:
+        connection = self._connection
+
+        if connection is None:
             raise RuntimeError("WebSocket is not connected.")
 
         payload = json.dumps(message)
 
-        await self._connection.send(payload)
+        await connection.send(payload)
 
         self._logger.debug(
             "Message sent.",
@@ -232,15 +335,31 @@ class WebSocketClient:
     async def request(
         self,
         message: dict[str, Any],
+        *,
         expected: str,
         timeout: float = 10.0,
     ) -> dict[str, Any]:
         """
         Send a request and wait for the matching response.
+
+        Parameters
+        ----------
+        message
+            Request payload.
+
+        expected
+            Expected ``msg_type`` returned by the API.
+
+        timeout
+            Maximum wait time in seconds.
+
+        Returns
+        -------
+        dict[str, Any]
+            API response.
         """
 
         async with self._request_lock:
-
             req_id = self._allocate_req_id()
 
             request = dict(message)
@@ -248,9 +367,7 @@ class WebSocketClient:
 
             loop = asyncio.get_running_loop()
 
-            future: asyncio.Future[dict[str, Any]] = (
-                loop.create_future()
-            )
+            future: asyncio.Future[dict[str, Any]] = loop.create_future()
 
             self._pending[req_id] = future
 
@@ -263,7 +380,6 @@ class WebSocketClient:
                 )
 
             except builtins.TimeoutError as exc:
-
                 self._logger.error(
                     "Request timed out.",
                     req_id=req_id,
@@ -271,21 +387,21 @@ class WebSocketClient:
                 )
 
                 raise TimeoutError(
-                    f"Timed out waiting for '{expected}'."
+                    f"Timed out waiting for '{expected}'.",
                 ) from exc
 
             finally:
                 self._pending.pop(req_id, None)
 
         #
-        # Validate response
+        # Validate response type
         #
 
         msg_type = response.get("msg_type")
 
         if msg_type != expected:
             raise RuntimeError(
-                f"Unexpected response type. "
+                "Unexpected response type. "
                 f"Expected '{expected}', "
                 f"received '{msg_type}'."
             )
@@ -294,14 +410,24 @@ class WebSocketClient:
         # API error
         #
 
-        if "error" in response:
+        error = response.get("error")
 
-            error = response["error"]
-
-            raise RuntimeError(
-                f"{error.get('code', 'Error')}: "
-                f"{error.get('message', 'Unknown error')}"
+        if isinstance(error, dict):
+            code = str(
+                error.get(
+                    "code",
+                    "APIError",
+                )
             )
+
+            error_message = str(
+                error.get(
+                    "message",
+                    "Unknown API error.",
+                )
+            )
+
+            raise RuntimeError(f"{code}: {error_message}")
 
         self._logger.debug(
             "Request completed.",
@@ -311,23 +437,30 @@ class WebSocketClient:
 
         return response
         # =====================================================
+
     # Receiver
     # =====================================================
 
     async def receive(self) -> None:
         """
         Background receive loop.
+
+        Continuously receives JSON messages from the
+        WebSocket connection and dispatches them to the
+        appropriate consumer.
         """
 
-        if self._connection is None:
+        connection = self._connection
+
+        if connection is None:
+            self._logger.debug("Receiver started without an active connection.")
             return
 
         self._logger.info("Receiver started.")
 
         try:
             while self._connected:
-
-                raw = await self._connection.recv()
+                raw = await connection.recv()
 
                 if isinstance(raw, bytes):
                     raw = raw.decode("utf-8")
@@ -336,9 +469,8 @@ class WebSocketClient:
                     message: dict[str, Any] = json.loads(raw)
 
                 except json.JSONDecodeError:
-                    self._logger.exception(
-                        "Received invalid JSON."
-                    )
+                    self._logger.exception("Received invalid JSON.")
+
                     continue
 
                 self._logger.debug(
@@ -347,11 +479,10 @@ class WebSocketClient:
                 )
 
                 #
-                # Streaming messages
+                # Streaming subscription
                 #
 
                 if "subscription" in message:
-
                     handled = await self._dispatch_stream(
                         message,
                     )
@@ -360,32 +491,29 @@ class WebSocketClient:
                         continue
 
                 #
-                # Request / Response
+                # Pending request correlation
                 #
 
                 req_id = message.get("req_id")
 
                 if isinstance(req_id, int):
-
                     future = self._pending.get(req_id)
 
                     if future is not None and not future.done():
                         future.set_result(message)
+                        continue
 
                 #
-                # Router dispatch
+                # General router dispatch
                 #
 
                 try:
                     self._router.dispatch(message)
 
                 except Exception:
-                    self._logger.exception(
-                        "Router dispatch failed."
-                    )
+                    self._logger.exception("Router dispatch failed.")
 
         except ConnectionClosed as exc:
-
             self._logger.warning(
                 "Connection closed.",
                 code=exc.code,
@@ -393,51 +521,52 @@ class WebSocketClient:
             )
 
         except asyncio.CancelledError:
-
-            self._logger.info(
-                "Receiver cancelled."
-            )
+            self._logger.info("Receiver cancelled.")
 
             raise
 
         except Exception:
-
-            self._logger.exception(
-                "Unexpected receiver failure."
-            )
+            self._logger.exception("Unexpected receiver failure.")
 
         finally:
-
             self._connected = False
 
             self._cancel_pending()
 
-            self._logger.info(
-                "Receiver stopped."
-            )
-                # =====================================================
+            self._logger.info("Receiver stopped.")
+            # =====================================================
+
     # Utilities
     # =====================================================
-
-    async def close(self) -> None:
-        """
-        Alias for disconnect().
-        """
-        await self.disconnect()
 
     async def ping(self) -> None:
         """
         Send a WebSocket ping frame.
+
+        Raises
+        ------
+        RuntimeError
+            If the transport is not connected.
         """
 
-        if self._connection is None:
-            raise RuntimeError(
-                "WebSocket is not connected."
-            )
+        connection = self._connection
 
-        await self._connection.ping()
+        if connection is None:
+            raise RuntimeError("WebSocket is not connected.")
 
-        self._logger.debug("Ping sent.")
+        await connection.ping()
+
+        self._logger.debug("Ping successful.")
+
+    async def close(self) -> None:
+        """
+        Alias for disconnect().
+
+        Allows compatibility with common async
+        client interfaces.
+        """
+
+        await self.disconnect()
 
     # =====================================================
     # Async Context Manager
@@ -445,8 +574,7 @@ class WebSocketClient:
 
     async def __aenter__(self) -> Self:
         """
-        Connect automatically when entering
-        an async context.
+        Enter the asynchronous context.
         """
 
         await self.connect()
@@ -455,13 +583,12 @@ class WebSocketClient:
 
     async def __aexit__(
         self,
-        exc_type,
-        exc,
-        tb,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         """
-        Disconnect automatically when leaving
-        an async context.
+        Exit the asynchronous context.
         """
 
         await self.disconnect()
@@ -469,14 +596,3 @@ class WebSocketClient:
     # =====================================================
     # Representation
     # =====================================================
-
-    def __repr__(self) -> str:
-        """
-        Developer-friendly representation.
-        """
-
-        return (
-            f"{self.__class__.__name__}("
-            f"connected={self._connected}, "
-            f"pending={len(self._pending)})"
-        )

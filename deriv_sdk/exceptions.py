@@ -4,7 +4,9 @@ Deriv SDK
 
 Exception Hierarchy
 
-Version : 2.0.0
+Central exception hierarchy used throughout the SDK.
+
+Version : 3.0.0
 ===========================================================
 """
 
@@ -32,7 +34,7 @@ class DerivError(Exception):
         self.details = details or {}
 
     def __str__(self) -> str:
-        if self.code:
+        if self.code is not None:
             return f"[{self.code}] {self.message}"
         return self.message
 
@@ -72,19 +74,6 @@ class MessageRouterError(TransportError):
 
 
 # =========================================================
-# Authentication
-# =========================================================
-
-
-class AuthenticationError(DerivError):
-    """Authentication failed."""
-
-
-class AuthorizationError(DerivError):
-    """Authorization failed."""
-
-
-# =========================================================
 # Validation
 # =========================================================
 
@@ -99,7 +88,17 @@ class ValidationError(DerivError):
 
 
 class APIError(DerivError):
-    """Deriv API returned an error."""
+    """
+    Base class for all errors returned by the Deriv API.
+    """
+
+
+class AuthenticationError(APIError):
+    """Authentication failed."""
+
+
+class AuthorizationError(APIError):
+    """Authorization failed."""
 
 
 class ProposalError(APIError):
@@ -119,7 +118,7 @@ class BalanceError(APIError):
 
 
 class RateLimitError(APIError):
-    """Rate limit exceeded."""
+    """API rate limit exceeded."""
 
 
 # =========================================================

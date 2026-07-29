@@ -70,9 +70,4 @@ class Tick:
         }
 
     def __repr__(self) -> str:
-        return (
-            "Tick("
-            f"symbol='{self.symbol}', "
-            f"quote={self.quote}, "
-            f"epoch={self.epoch})"
-        )
+        return f"Tick(symbol='{self.symbol}', quote={self.quote}, epoch={self.epoch})"
