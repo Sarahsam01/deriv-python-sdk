@@ -1,51 +1,38 @@
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+[tool.ruff]
+line-length = 88
+target-version = "py312"
 
-[project]
-name = "deriv-sdk"
-version = "0.1.0"
-description = "A modern asynchronous Python SDK for the Deriv API."
-readme = "README.md"
-requires-python = ">=3.11"
-
-authors = [
-    { name = "Samuel Tripple" }
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
 ]
 
-license = { text = "MIT" }
-
-keywords = [
-    "deriv",
-    "trading",
-    "api",
-    "websocket",
-    "sdk",
-    "python"
+ignore = [
+    "UP046",
 ]
+[tool.mypy]
+python_version = "3.12"
 
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Operating System :: OS Independent",
-    "License :: OSI Approved :: MIT License"
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+check_untyped_defs = true
+
+strict_optional = true
+
+pretty = true
+
+show_error_codes = true
+
+exclude = [
+    "tests/",
 ]
-
-dependencies = [
-    "httpx>=0.28.0",
-    "websockets>=15.0",
-    "python-dotenv>=1.1.0",
-    "pydantic>=2.11.0",
-    "structlog>=25.0.0"
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-asyncio",
-    "ruff",
-    "mypy"
-]
-
-[tool.setuptools.packages.find]
-include = ["deriv_sdk*"]

@@ -53,9 +53,7 @@ class AuthService:
         Authenticate using the configured API token.
         """
 
-        message = AuthorizeRequest(
-            self._config.api_token
-        ).to_dict()
+        message = AuthorizeRequest(self._config.api_token).to_dict()
 
         response: dict[str, Any] = await self._websocket.request(
             message,

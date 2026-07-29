@@ -72,6 +72,4 @@ class Heartbeat:
 
             self._logger.info("Sending heartbeat.")
 
-            await self._sender(
-                PingRequest().to_dict()
-            )
+            await self._sender(PingRequest().to_dict())

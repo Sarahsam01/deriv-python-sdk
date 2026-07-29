@@ -1,9 +1,7 @@
 from deriv_sdk.auth.models import AuthorizeResponse
 
 sample = {
-    "echo_req": {
-        "authorize": "TOKEN"
-    },
+    "echo_req": {"authorize": "TOKEN"},
     "msg_type": "authorize",
     "authorize": {
         "loginid": "VRTC11003424",
@@ -11,8 +9,8 @@ sample = {
         "balance": 39.20,
         "email": "user@example.com",
         "fullname": "Demo User",
-        "is_virtual": True
-    }
+        "is_virtual": True,
+    },
 }
 
 response = AuthorizeResponse.model_validate(sample)

@@ -1,0 +1,49 @@
+ Volume in drive C has no label.
+ Volume Serial Number is 9A05-A9FF
+
+ Directory of C:\Users\USER\Desktop\deriv-sdk
+
+
+ Directory of C:\Users\USER\Desktop\deriv-sdk
+
+07/27/2026  10:28 PM    <DIR>          .
+07/24/2026  08:48 PM    <DIR>          ..
+07/26/2026  07:59 PM               129 .coveragerc
+07/24/2026  10:01 PM                66 .env
+07/24/2026  09:36 PM                51 .env.example
+07/24/2026  09:36 PM               115 .gitignore
+07/26/2026  08:11 PM    <DIR>          .pytest_cache
+07/24/2026  10:37 PM    <DIR>          .ruff_cache
+07/27/2026  09:48 PM            15,274 =exc.code,
+07/27/2026  09:47 PM                 0 bool
+07/27/2026  09:47 PM                 0 ClientConnection
+07/26/2026  06:15 PM    <DIR>          deriv_sdk
+07/27/2026  10:28 PM                 0 dir
+07/24/2026  08:48 PM    <DIR>          docs
+07/24/2026  08:48 PM    <DIR>          examples
+07/27/2026  09:47 PM                 0 int
+07/24/2026  08:48 PM                 0 LICENSE
+07/27/2026  09:47 PM                 0 MessageRouter
+07/27/2026  09:47 PM                 0 None
+07/24/2026  09:35 PM               976 pyproject.toml
+07/26/2026  08:11 PM               197 pytest.ini
+07/24/2026  09:35 PM               315 README.md
+07/26/2026  07:58 PM                84 requirements-dev.txt
+07/27/2026  09:47 PM                 0 Self
+07/26/2026  07:55 PM                34 smoke_test.py
+07/27/2026  09:47 PM                 0 str
+07/27/2026  09:45 PM    <DIR>          tests
+07/26/2026  07:55 PM               401 test_authorize.py
+07/24/2026  10:37 PM               203 test_client.py
+07/24/2026  10:37 PM               337 test_config.py
+07/26/2026  07:55 PM               466 test_heartbeat.py
+07/24/2026  10:37 PM               215 test_logger.py
+07/26/2026  07:55 PM               476 test_market.py
+07/24/2026  10:37 PM               381 test_messages.py
+07/26/2026  07:55 PM               665 test_models.py
+07/26/2026  07:55 PM               617 test_request.py
+07/24/2026  10:40 PM               783 test_router.py
+07/26/2026  07:55 PM               674 test_websocket.py
+07/24/2026  09:12 PM    <DIR>          venv
+              30 File(s)         22,459 bytes
+               9 Dir(s)  160,024,354,816 bytes free
