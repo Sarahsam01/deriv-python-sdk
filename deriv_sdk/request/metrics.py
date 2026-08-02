@@ -7,6 +7,8 @@ from time import time
 
 @dataclass(frozen=True, slots=True)
 class MetricsSnapshot:
+    """Immutable request metrics snapshot."""
+
     total_requests: int
     successful_requests: int
     failed_requests: int
@@ -20,6 +22,8 @@ class MetricsSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class HealthSnapshot:
+    """Immutable SDK health snapshot safe for logging and diagnostics."""
+
     connected: bool
     authorized: bool
     started: bool
@@ -38,6 +42,8 @@ class HealthSnapshot:
 
 
 class RequestMetrics:
+    """Concurrency-safe request metrics collector."""
+
     def __init__(self) -> None:
         self._lock = Lock()
         self.total_requests = 0
@@ -52,6 +58,16 @@ class RequestMetrics:
         self.reset()
 
     def record_success(self, *, latency: float, retries: int) -> None:
+        """
+        Record a successful request.
+
+        Parameters
+        ----------
+        latency:
+            Request duration in seconds.
+        retries:
+            Number of retry attempts used before success.
+        """
         with self._lock:
             self.total_requests += 1
             self.successful_requests += 1
@@ -67,6 +83,20 @@ class RequestMetrics:
         exception: Exception,
         timed_out: bool = False,
     ) -> None:
+        """
+        Record a failed request.
+
+        Parameters
+        ----------
+        latency:
+            Request duration in seconds.
+        retries:
+            Number of retry attempts used before failure.
+        exception:
+            Sanitized exception source used for the error type.
+        timed_out:
+            Whether the failure was a timeout.
+        """
         with self._lock:
             self.total_requests += 1
             self.failed_requests += 1
@@ -77,6 +107,7 @@ class RequestMetrics:
             self.last_error_type = type(exception).__name__
 
     def snapshot(self) -> MetricsSnapshot:
+        """Return a point-in-time immutable metrics snapshot."""
         with self._lock:
             average = (
                 self._total_latency / self.total_requests
@@ -96,6 +127,7 @@ class RequestMetrics:
             )
 
     def reset(self) -> None:
+        """Reset all metrics counters and last-event timestamps."""
         with self._lock:
             self.total_requests = 0
             self.successful_requests = 0

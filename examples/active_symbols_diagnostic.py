@@ -13,40 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 load_dotenv()
 
-from deriv_sdk.auth.service import AuthService  # noqa: E402
 from deriv_sdk.config import SDKConfig  # noqa: E402
 from deriv_sdk.market.responses import ActiveSymbolsResponse  # noqa: E402
 from deriv_sdk.transport.websocket import WebSocketClient  # noqa: E402
-
-
-class DiagnosticWebSocketClient(WebSocketClient):
-    async def request_raw(
-        self,
-        message: dict[str, Any],
-        *,
-        expected: str,
-        timeout: float = 10.0,
-    ) -> dict[str, Any]:
-        req_id = await self._allocate_req_id()
-        request = dict(message)
-        request["req_id"] = req_id
-        future = self._registry.register(req_id)
-
-        try:
-            await self.send(request)
-            response = await asyncio.wait_for(future, timeout=timeout)
-        finally:
-            self._registry.unregister(req_id)
-
-        msg_type = response.get("msg_type")
-        if msg_type != expected:
-            raise RuntimeError(
-                "Unexpected response type. "
-                f"Expected '{expected}', received '{msg_type}'."
-            )
-
-        return response
-
 
 VARIANTS: tuple[tuple[str, dict[str, Any]], ...] = (
     ("A", {"active_symbols": "brief"}),
@@ -138,14 +107,15 @@ def _summarize(
 
 
 async def _authorize(
-    client: DiagnosticWebSocketClient,
+    client: WebSocketClient,
     token: str | None,
 ) -> dict[str, Any] | None:
     if token is None:
         return None
 
-    auth = AuthService(client)
-    return await auth.authorize(token)
+    return await client.request(
+        {"authorize": token}, expected="authorize", timeout=20.0
+    )
 
 
 async def _run_mode(
@@ -153,7 +123,7 @@ async def _run_mode(
     app_id: str,
     api_token: str | None,
 ) -> None:
-    client = DiagnosticWebSocketClient(SDKConfig(app_id=app_id))
+    client = WebSocketClient(SDKConfig(app_id=app_id))
     authorize_response = None
 
     try:
@@ -162,7 +132,7 @@ async def _run_mode(
         mode = _account_label(authorize_response)
 
         for variant, payload in VARIANTS:
-            response = await client.request_raw(
+            response = await client.request(
                 payload,
                 expected="active_symbols",
                 timeout=20.0,

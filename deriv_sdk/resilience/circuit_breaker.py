@@ -10,6 +10,8 @@ from deriv_sdk.exceptions import CircuitOpenError
 
 
 class CircuitBreakerState(StrEnum):
+    """Circuit breaker state values."""
+
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
@@ -25,6 +27,8 @@ def _default_failure_predicate(exception: Exception) -> bool:
 
 @dataclass(slots=True)
 class CircuitBreakerSnapshot:
+    """Immutable circuit breaker state summary."""
+
     name: str
     state: CircuitBreakerState
     failures: int
@@ -33,6 +37,27 @@ class CircuitBreakerSnapshot:
 
 
 class CircuitBreaker:
+    """
+    Async circuit breaker for protecting failing request paths.
+
+    Parameters
+    ----------
+    name:
+        Human-readable circuit name used in diagnostics.
+    failure_threshold:
+        Number of predicate-matching failures before opening.
+    recovery_timeout:
+        Seconds to remain open before allowing half-open probes.
+    half_open_probe_limit:
+        Maximum concurrent probes in half-open state.
+    success_threshold:
+        Number of half-open successes required to close.
+    failure_predicate:
+        Optional callback deciding which exceptions count as failures.
+    time_source:
+        Monotonic time source, injectable for deterministic tests.
+    """
+
     def __init__(
         self,
         *,
@@ -75,6 +100,14 @@ class CircuitBreaker:
         return self._state
 
     async def before_request(self) -> None:
+        """
+        Check whether a request may proceed.
+
+        Raises
+        ------
+        CircuitOpenError
+            If the circuit is open or half-open probe capacity is exhausted.
+        """
         async with self._lock:
             state = self.state
             if state is CircuitBreakerState.OPEN:
@@ -94,6 +127,7 @@ class CircuitBreaker:
                 self._half_open_in_flight += 1
 
     async def after_success(self) -> None:
+        """Record a successful protected request."""
         async with self._lock:
             if self._state is CircuitBreakerState.HALF_OPEN:
                 self._half_open_in_flight = max(0, self._half_open_in_flight - 1)
@@ -104,6 +138,7 @@ class CircuitBreaker:
             self._failures = 0
 
     async def after_failure(self, exception: Exception) -> None:
+        """Record a failed protected request."""
         async with self._lock:
             if self._state is CircuitBreakerState.HALF_OPEN:
                 self._half_open_in_flight = max(0, self._half_open_in_flight - 1)
@@ -120,6 +155,7 @@ class CircuitBreaker:
                 self._open()
 
     def snapshot(self) -> CircuitBreakerSnapshot:
+        """Return a snapshot of the current circuit state."""
         return CircuitBreakerSnapshot(
             name=self.name,
             state=self.state,

@@ -28,9 +28,35 @@ class TransactionService(BaseTradingService[Transaction]):
     """Service responsible for retrieving transaction information."""
 
     def __init__(self, websocket: WebSocketClient | RequestEngine) -> None:
+        """
+        Create a transaction service.
+
+        Parameters
+        ----------
+        websocket:
+            Shared request engine or compatible transport.
+        """
         super().__init__(websocket)
 
     async def get(self, *, transaction_id: int) -> Transaction:
+        """
+        Retrieve a transaction by id.
+
+        Parameters
+        ----------
+        transaction_id:
+            Positive Deriv transaction identifier.
+
+        Returns
+        -------
+        Transaction
+            Parsed transaction model.
+
+        Raises
+        ------
+        ValueError
+            If ``transaction_id`` is not positive.
+        """
         if transaction_id <= 0:
             raise ValueError("transaction_id must be greater than zero.")
 
@@ -48,4 +74,5 @@ class TransactionService(BaseTradingService[Transaction]):
         self,
         response: dict[str, Any],
     ) -> Transaction:
+        """Convert the API response into a Transaction model."""
         return Transaction.from_api(response)

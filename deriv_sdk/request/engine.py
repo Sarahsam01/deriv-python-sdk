@@ -281,6 +281,23 @@ class RequestEngine:
         authorized: bool = False,
         active_subscriptions: int = 0,
     ) -> HealthSnapshot:
+        """
+        Return a typed health snapshot for diagnostics.
+
+        Parameters
+        ----------
+        started:
+            Whether the owning client has completed startup.
+        authorized:
+            Whether the owning client is authorized.
+        active_subscriptions:
+            Number of active streaming subscriptions.
+
+        Returns
+        -------
+        HealthSnapshot
+            Log-safe runtime health and metrics summary.
+        """
         metrics = self._metrics.snapshot()
         pending = getattr(self._transport, "pending_requests", 0)
         return HealthSnapshot(

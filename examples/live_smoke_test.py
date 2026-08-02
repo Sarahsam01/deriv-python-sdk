@@ -76,9 +76,10 @@ async def _collect_ticks(client: Any, symbol: str) -> list[Any]:
         subscription = await client.market.subscribe_ticks(symbol)
         ticks: list[Any] = []
 
-        while len(ticks) < 3:
-            tick = await asyncio.wait_for(subscription.__anext__(), timeout=10)
+        async for tick in subscription:
             ticks.append(tick)
+            if len(ticks) >= 3:
+                break
 
         return ticks
     finally:

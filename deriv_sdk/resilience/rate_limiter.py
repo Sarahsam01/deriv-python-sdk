@@ -6,6 +6,21 @@ from time import monotonic
 
 
 class AsyncRateLimiter:
+    """
+    Async token-bucket rate limiter.
+
+    Parameters
+    ----------
+    rate:
+        Tokens added per second.
+    burst:
+        Maximum bucket capacity. Defaults to ``int(rate)`` with a minimum of 1.
+    time_source:
+        Monotonic time source, injectable for deterministic tests.
+    sleep:
+        Async sleep function, injectable for deterministic tests.
+    """
+
     def __init__(
         self,
         *,
@@ -26,6 +41,14 @@ class AsyncRateLimiter:
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
+        """
+        Wait until one token is available.
+
+        Raises
+        ------
+        asyncio.CancelledError
+            If the waiting task is cancelled by the caller.
+        """
         while True:
             delay = 0.0
             async with self._lock:
@@ -44,4 +67,5 @@ class AsyncRateLimiter:
 
     @property
     def available_tokens(self) -> float:
+        """Return the currently cached token count."""
         return self._tokens

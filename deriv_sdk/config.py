@@ -24,7 +24,20 @@ load_dotenv()
 
 @dataclass(slots=True)
 class SDKConfig:
-    """SDK configuration."""
+    """
+    SDK connection configuration.
+
+    Parameters
+    ----------
+    app_id:
+        Deriv application id used to build the WebSocket URL.
+    api_token:
+        Optional Deriv API token for authenticated calls.
+    environment:
+        Logical environment label, usually ``demo`` or ``live``.
+    timeout:
+        Default timeout value used by callers that opt into config defaults.
+    """
 
     app_id: str = os.getenv("DERIV_APP_ID", "")
     api_token: str = os.getenv("DERIV_API_TOKEN", "")
@@ -36,17 +49,28 @@ class SDKConfig:
 
     @property
     def websocket_url(self) -> str:
+        """Return the Deriv WebSocket URL for the configured app id."""
         return f"wss://ws.derivws.com/websockets/v3?app_id={self.app_id}"
 
     @property
     def is_demo(self) -> bool:
+        """Return ``True`` when the configured environment is demo."""
         return self.environment.lower() == "demo"
 
     @property
     def is_live(self) -> bool:
+        """Return ``True`` when the configured environment is live."""
         return self.environment.lower() == "live"
 
     def validate(self) -> None:
+        """
+        Validate required configuration values.
+
+        Raises
+        ------
+        ValueError
+            If ``app_id`` or ``api_token`` is missing.
+        """
         if not self.app_id:
             raise ValueError("DERIV_APP_ID is missing.")
 
