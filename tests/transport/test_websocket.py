@@ -3,7 +3,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from deriv_sdk.exceptions import TimeoutError
+from deriv_sdk.exceptions import (
+    APIError,
+    ClientClosedError,
+    TimeoutError,
+    ValidationError,
+)
 
 # ==========================================================
 # API Error Response
@@ -42,7 +47,7 @@ async def test_disconnect_cancels_pending_requests(websocket):
 
     websocket._cancel_pending()
 
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(ClientClosedError):
         await task
 
     assert websocket._pending == {}
@@ -103,8 +108,10 @@ async def test_request_api_error(websocket):
         }
     )
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(APIError) as exc_info:
         await task
+
+    assert exc_info.value.code == "InvalidToken"
 
 
 # ==========================================================
@@ -135,7 +142,7 @@ async def test_request_wrong_msg_type(websocket):
         }
     )
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValidationError):
         await task
 
 

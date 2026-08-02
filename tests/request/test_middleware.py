@@ -111,7 +111,8 @@ async def test_logging_middleware_is_concurrency_safe_and_redacts(caplog):
     await asyncio.gather(*(middleware.before_request(context) for context in contexts))
     await asyncio.gather(*(middleware.after_response(context) for context in contexts))
 
-    log_text = caplog.text
+    payloads = [record.__dict__.get("payload") for record in caplog.records]
+    log_text = f"{caplog.text} {payloads}"
     assert "***" in log_text
     assert "secret-0" not in log_text
     assert "secret-1" not in log_text

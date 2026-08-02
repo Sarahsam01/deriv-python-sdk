@@ -78,6 +78,7 @@ class RetryMiddleware(Middleware):
             return
 
         policy = context.options.retry_policy
+        policy = policy.for_endpoint(context.options.endpoint)
 
         if not policy.should_retry(
             context.retries,

@@ -1,0 +1,4 @@
+prune tests
+prune .github
+exclude test_*.py
+exclude smoke_test.py

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, cast
 
+from deriv_sdk.exceptions import SubscriptionError
 from deriv_sdk.logger import get_logger
 from deriv_sdk.streaming.manager import SubscriptionManager
 from deriv_sdk.streaming.models import Tick, TickResponse
@@ -95,7 +96,7 @@ class TickStream:
         subscription_data = tick_response.subscription
 
         if subscription_data is None or "id" not in subscription_data:
-            raise RuntimeError("Deriv did not return a subscription ID.")
+            raise SubscriptionError("Deriv did not return a subscription ID.")
 
         subscription_id = str(subscription_data["id"])
 

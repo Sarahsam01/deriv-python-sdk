@@ -19,8 +19,10 @@ Version : 4.0
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+from deriv_sdk.exceptions import TimeoutError
 from deriv_sdk.middleware.base import Middleware
 from deriv_sdk.middleware.logging import LoggingMiddleware
 from deriv_sdk.middleware.pipeline import MiddlewarePipeline
@@ -28,6 +30,7 @@ from deriv_sdk.middleware.retry import RetryMiddleware
 from deriv_sdk.middleware.validation import ValidationMiddleware
 from deriv_sdk.request.context import RequestContext
 from deriv_sdk.request.id_generator import RequestIdGenerator, UUIDRequestIdGenerator
+from deriv_sdk.request.metrics import HealthSnapshot, RequestMetrics
 from deriv_sdk.request.options import RequestOptions
 from deriv_sdk.transport.websocket import WebSocketClient
 
@@ -60,11 +63,14 @@ class RequestEngine:
         self,
         transport: WebSocketClient,
         request_id_generator: RequestIdGenerator | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
 
         self._transport = transport
         self._request_id_generator = request_id_generator or UUIDRequestIdGenerator()
         self._pipeline = MiddlewarePipeline()
+        self._sleep = sleep
+        self._metrics = RequestMetrics()
 
         # --------------------------------------------------
         # Default Middleware
@@ -101,6 +107,10 @@ class RequestEngine:
     @property
     def connected(self) -> bool:
         return self._transport.connected
+
+    @property
+    def metrics(self) -> RequestMetrics:
+        return self._metrics
 
     # =====================================================
     # Middleware Management
@@ -192,6 +202,8 @@ class RequestEngine:
             payload,
             **kwargs,
         )
+        breaker = context.options.circuit_breaker
+        limiter = context.options.rate_limiter
 
         while True:
             context.reset()
@@ -201,24 +213,34 @@ class RequestEngine:
             )
 
             try:
+                if breaker is not None:
+                    await breaker.before_request()
+
+                if limiter is not None:
+                    await limiter.acquire()
+
                 expected = context.options.expected_msg_type
                 if expected is None:
                     raise ValueError("Expected response type is required.")
 
-                timeout = (
-                    context.options.timeout
-                    if context.options.timeout is not None
-                    else 10.0
-                )
+                timeout = context.options.timeout
 
                 context.response = await self._transport.request(
                     context.payload,
                     expected=expected,
-                    timeout=timeout,
+                    timeout=timeout if timeout is not None else 10.0,
                 )
 
                 await self._pipeline.after_response(
                     context,
+                )
+
+                if breaker is not None:
+                    await breaker.after_success()
+
+                self._metrics.record_success(
+                    latency=context.elapsed,
+                    retries=context.retries,
                 )
 
                 return context.response
@@ -226,19 +248,57 @@ class RequestEngine:
             except Exception as exc:
                 context.exception = exc
 
+                if breaker is not None:
+                    await breaker.after_failure(exc)
+
                 await self._pipeline.on_exception(
                     context,
                 )
 
                 if not context.should_retry:
+                    self._metrics.record_failure(
+                        latency=context.elapsed,
+                        retries=context.retries,
+                        exception=exc,
+                        timed_out=isinstance(exc, TimeoutError),
+                    )
                     raise
 
-                delay = context.options.retry_policy.next_delay(
+                policy = context.options.retry_policy.for_endpoint(
+                    context.options.endpoint
+                )
+                delay = policy.next_delay(
                     context.retries - 1,
                 )
 
                 if delay > 0:
-                    await asyncio.sleep(delay)
+                    await self._sleep(delay)
+
+    def health_snapshot(
+        self,
+        *,
+        started: bool = False,
+        authorized: bool = False,
+        active_subscriptions: int = 0,
+    ) -> HealthSnapshot:
+        metrics = self._metrics.snapshot()
+        pending = getattr(self._transport, "pending_requests", 0)
+        return HealthSnapshot(
+            connected=self.connected,
+            authorized=authorized,
+            started=started,
+            pending_requests=pending,
+            active_subscriptions=active_subscriptions,
+            total_requests=metrics.total_requests,
+            successful_requests=metrics.successful_requests,
+            failed_requests=metrics.failed_requests,
+            retried_requests=metrics.retried_requests,
+            timed_out_requests=metrics.timed_out_requests,
+            average_latency=metrics.average_latency,
+            last_successful_request_time=metrics.last_successful_request_time,
+            last_error_time=metrics.last_error_time,
+            last_error_type=metrics.last_error_type,
+        )
 
     # =====================================================
     # Subscriptions

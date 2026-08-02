@@ -143,9 +143,10 @@ class RequestContext:
         Whether another retry is permitted.
         """
         exception = self.exception or self.last_exception
+        policy = self.options.retry_policy.for_endpoint(self.options.endpoint)
         if exception is None:
-            return self.options.retry_policy.enabled
-        return self.options.retry_policy.should_retry(self.retries, exception)
+            return policy.enabled
+        return policy.should_retry(self.retries, exception)
 
     # =====================================================
     # Metadata Helpers

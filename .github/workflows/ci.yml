@@ -34,23 +34,25 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install package
-        run: pip install -e .
+        run: pip install -e ".[dev]"
 
-      - name: Install development tools
-        run: |
-          pip install ruff
-          pip install mypy
-          pip install pytest
-          pip install pytest-cov
+      - name: Compile
+        run: python -m compileall deriv_sdk tests examples
 
-      - name: Run Ruff
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Lint
         run: ruff check .
 
-      - name: Run MyPy
+      - name: Type check
         run: mypy deriv_sdk
 
-      - name: Run Tests
+      - name: Test
         run: pytest
 
-      - name: Run Coverage
-        run: pytest --cov=deriv_sdk --cov-report=term
+      - name: Build package
+        run: python -m build
+
+      - name: Validate package
+        run: twine check dist/*

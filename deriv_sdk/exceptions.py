@@ -65,6 +65,14 @@ class TimeoutError(TransportError):
     """A request timed out."""
 
 
+class RequestCancelledError(TransportError):
+    """A request was cancelled before completion."""
+
+
+class ClientClosedError(TransportError):
+    """The client or transport was closed while work was pending."""
+
+
 class ReconnectError(TransportError):
     """Automatic reconnection failed."""
 
@@ -119,6 +127,18 @@ class BalanceError(APIError):
 
 class RateLimitError(APIError):
     """API rate limit exceeded."""
+
+
+class CircuitOpenError(DerivError):
+    """A circuit breaker is open and rejected the request."""
+
+
+class RetryExhaustedError(DerivError):
+    """Retry attempts were exhausted."""
+
+
+class SubscriptionError(DerivError):
+    """Streaming subscription failure."""
 
 
 # =========================================================

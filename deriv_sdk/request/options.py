@@ -21,6 +21,8 @@ from dataclasses import dataclass, field, fields
 from typing import Any
 
 from deriv_sdk.request.retry_policy import RetryPolicy
+from deriv_sdk.resilience.circuit_breaker import CircuitBreaker
+from deriv_sdk.resilience.rate_limiter import AsyncRateLimiter
 
 
 @dataclass(slots=True)
@@ -62,6 +64,13 @@ class RequestOptions:
     retry_policy: RetryPolicy = field(
         default_factory=RetryPolicy,
     )
+
+    # =====================================================
+    # Resilience
+    # =====================================================
+
+    circuit_breaker: CircuitBreaker | None = None
+    rate_limiter: AsyncRateLimiter | None = None
 
     # =====================================================
     # Factory
@@ -118,6 +127,8 @@ class RequestOptions:
             service_name=self.service_name,
             request_id=self.request_id,
             retry_policy=self.retry_policy,
+            circuit_breaker=self.circuit_breaker,
+            rate_limiter=self.rate_limiter,
         )
 
     # =====================================================

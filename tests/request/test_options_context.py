@@ -1,5 +1,6 @@
 import pytest
 
+from deriv_sdk.exceptions import TimeoutError
 from deriv_sdk.request.context import RequestContext
 from deriv_sdk.request.options import RequestOptions
 from deriv_sdk.request.retry_policy import RetryPolicy
@@ -64,15 +65,30 @@ def test_retry_policy_delay_and_eligibility():
         retry_on=(TimeoutError,),
     )
 
-    assert policy.should_retry(0, TimeoutError())
-    assert not policy.should_retry(2, TimeoutError())
+    assert policy.should_retry(0, TimeoutError("timeout"))
+    assert not policy.should_retry(2, TimeoutError("timeout"))
     assert not policy.should_retry(0, RuntimeError())
     assert policy.next_delay(0) == 0.5
     assert policy.next_delay(1) == 1.0
 
 
+def test_retry_policy_jitter_and_endpoint_override_are_deterministic():
+    override = RetryPolicy(
+        max_attempts=1,
+        initial_delay=1.0,
+        jitter=True,
+        jitter_source=lambda: 0.5,
+    )
+    policy = RetryPolicy(endpoint_overrides={"ping": override})
+
+    selected = policy.for_endpoint("ping")
+
+    assert selected is override
+    assert selected.next_delay(0) == 0.5
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 def test_retry_policy_enabled_flag(enabled):
-    policy = RetryPolicy(max_attempts=1, enabled=enabled)
+    policy = RetryPolicy(max_attempts=1, enabled=enabled, retry_on=(TimeoutError,))
 
-    assert policy.should_retry(0, Exception()) is enabled
+    assert policy.should_retry(0, TimeoutError("timeout")) is enabled

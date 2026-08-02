@@ -26,6 +26,7 @@ from deriv_sdk.auth.service import AuthService
 from deriv_sdk.config import SDKConfig
 from deriv_sdk.market.service import MarketService
 from deriv_sdk.request.engine import RequestEngine
+from deriv_sdk.request.metrics import HealthSnapshot, MetricsSnapshot
 from deriv_sdk.trading.balance_service import BalanceService
 from deriv_sdk.trading.buy_service import BuyService
 from deriv_sdk.trading.contract_service import ContractService
@@ -261,6 +262,27 @@ class DerivClient:
         Whether the session has been authorized.
         """
         return self.auth.authorized
+
+    def metrics(self) -> MetricsSnapshot:
+        """
+        Return a concurrency-safe snapshot of request metrics.
+        """
+        return self._request_engine.metrics.snapshot()
+
+    def reset_metrics(self) -> None:
+        """
+        Reset request metrics counters.
+        """
+        self._request_engine.metrics.reset()
+
+    def health(self) -> HealthSnapshot:
+        """
+        Return a log-safe snapshot of SDK runtime health.
+        """
+        return self._request_engine.health_snapshot(
+            started=self.started,
+            authorized=self.authorized,
+        )
 
     # ======================================================
     # Services

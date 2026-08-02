@@ -38,12 +38,19 @@ class LoggingMiddleware(Middleware):
 
     @staticmethod
     def _redact_mapping(value: object) -> object:
+        if isinstance(value, list):
+            return [LoggingMiddleware._redact_mapping(item) for item in value]
+
         if not isinstance(value, dict):
             return value
 
         sensitive_keys = {
             "api_token",
             "authorize",
+            "email",
+            "fullname",
+            "loginid",
+            "name",
             "token",
         }
 
@@ -51,10 +58,10 @@ class LoggingMiddleware(Middleware):
         for key, item in value.items():
             if isinstance(key, str) and key.lower() in sensitive_keys:
                 redacted[key] = "***"
-            elif isinstance(item, dict):
-                redacted[key] = LoggingMiddleware._redact_mapping(item)
+            elif isinstance(key, str) and "account" in key.lower():
+                redacted[key] = "***"
             else:
-                redacted[key] = item
+                redacted[key] = LoggingMiddleware._redact_mapping(item)
         return redacted
 
     # =====================================================
@@ -70,10 +77,14 @@ class LoggingMiddleware(Middleware):
         """
 
         self._logger.debug(
-            "Sending request [endpoint=%s, request_id=%s]: %s",
-            context.options.endpoint,
-            context.request_id,
-            self._redact_mapping(context.payload),
+            "Sending request.",
+            extra={
+                "endpoint": context.options.endpoint,
+                "service_name": context.options.service_name,
+                "request_id": context.request_id,
+                "payload": self._redact_mapping(context.payload),
+                "retry_count": context.retries,
+            },
         )
 
     # =====================================================
@@ -89,11 +100,15 @@ class LoggingMiddleware(Middleware):
         """
 
         self._logger.debug(
-            "Received response [endpoint=%s, request_id=%s, elapsed=%.3fs]: %s",
-            context.options.endpoint,
-            context.request_id,
-            context.elapsed,
-            self._redact_mapping(context.response),
+            "Received response.",
+            extra={
+                "endpoint": context.options.endpoint,
+                "service_name": context.options.service_name,
+                "request_id": context.request_id,
+                "duration": context.elapsed,
+                "retry_count": context.retries,
+                "response": self._redact_mapping(context.response),
+            },
         )
 
     # =====================================================
@@ -109,11 +124,18 @@ class LoggingMiddleware(Middleware):
         """
 
         self._logger.exception(
-            "Request failed [endpoint=%s, request_id=%s, elapsed=%.3fs]",
-            context.options.endpoint,
-            context.request_id,
-            context.elapsed,
+            "Request failed.",
             exc_info=context.exception,
+            extra={
+                "endpoint": context.options.endpoint,
+                "service_name": context.options.service_name,
+                "request_id": context.request_id,
+                "duration": context.elapsed,
+                "retry_count": context.retries,
+                "error_type": type(context.exception).__name__
+                if context.exception is not None
+                else None,
+            },
         )
 
     # =====================================================

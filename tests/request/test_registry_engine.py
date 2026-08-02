@@ -2,11 +2,19 @@ import asyncio
 
 import pytest
 
-from deriv_sdk.exceptions import TimeoutError as DerivTimeoutError
+from deriv_sdk.exceptions import (
+    APIError,
+    CircuitOpenError,
+)
+from deriv_sdk.exceptions import (
+    TimeoutError as DerivTimeoutError,
+)
 from deriv_sdk.request.engine import RequestEngine
 from deriv_sdk.request.id_generator import UUIDRequestIdGenerator
 from deriv_sdk.request.registry import RequestRegistry
 from deriv_sdk.request.retry_policy import RetryPolicy
+from deriv_sdk.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerState
+from deriv_sdk.resilience.rate_limiter import AsyncRateLimiter
 
 
 class FakeTransport:
@@ -143,10 +151,10 @@ async def test_request_engine_requires_expected_for_empty_payload():
 
 @pytest.mark.asyncio
 async def test_request_engine_api_error_propagates():
-    transport = FakeTransport([RuntimeError("APIError: bad request")])
+    transport = FakeTransport([APIError("bad request", code="APIError")])
     engine = RequestEngine(transport)  # type: ignore[arg-type]
 
-    with pytest.raises(RuntimeError, match="APIError"):
+    with pytest.raises(APIError, match="bad request"):
         await engine.send({"ping": 1})
 
 
@@ -159,3 +167,102 @@ async def test_request_engine_timeout_propagates_without_retry():
         await engine.send({"ping": 1})
 
     await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_request_engine_uses_injected_sleep_for_retry_delay():
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    transport = FakeTransport(
+        [
+            DerivTimeoutError("timeout"),
+            {"msg_type": "ping", "ping": "pong"},
+        ]
+    )
+    engine = RequestEngine(transport, sleep=fake_sleep)  # type: ignore[arg-type]
+
+    await engine.send(
+        {"ping": 1},
+        retry_policy=RetryPolicy(
+            max_attempts=1,
+            initial_delay=0.25,
+            retry_on=(DerivTimeoutError,),
+        ),
+    )
+
+    assert sleeps == [0.25]
+
+
+@pytest.mark.asyncio
+async def test_request_engine_circuit_breaker_rejects_when_open():
+    transport = FakeTransport([DerivTimeoutError("one")])
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout=60)
+    engine = RequestEngine(transport)  # type: ignore[arg-type]
+
+    with pytest.raises(DerivTimeoutError):
+        await engine.send(
+            {"ping": 1},
+            circuit_breaker=breaker,
+            retry_policy=RetryPolicy(max_attempts=0),
+        )
+
+    assert breaker.state is CircuitBreakerState.OPEN
+
+    with pytest.raises(CircuitOpenError):
+        await engine.send({"ping": 1}, circuit_breaker=breaker)
+
+
+@pytest.mark.asyncio
+async def test_request_engine_rate_limiter_runs_before_transport():
+    sleeps: list[float] = []
+    now = 0.0
+
+    async def fake_sleep(delay: float) -> None:
+        nonlocal now
+        sleeps.append(delay)
+        now += delay
+
+    limiter = AsyncRateLimiter(
+        rate=1,
+        burst=1,
+        time_source=lambda: now,
+        sleep=fake_sleep,
+    )
+    transport = FakeTransport(
+        [
+            {"msg_type": "ping"},
+            {"msg_type": "ping"},
+        ]
+    )
+    engine = RequestEngine(transport)  # type: ignore[arg-type]
+
+    await engine.send({"ping": 1}, rate_limiter=limiter)
+    await engine.send({"ping": 1}, rate_limiter=limiter)
+
+    assert sleeps == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_request_engine_metrics_snapshot_records_outcomes():
+    transport = FakeTransport(
+        [
+            {"msg_type": "ping"},
+            DerivTimeoutError("timeout"),
+        ]
+    )
+    engine = RequestEngine(transport)  # type: ignore[arg-type]
+
+    await engine.send({"ping": 1})
+    with pytest.raises(DerivTimeoutError):
+        await engine.send({"ping": 1})
+
+    snapshot = engine.metrics.snapshot()
+
+    assert snapshot.total_requests == 2
+    assert snapshot.successful_requests == 1
+    assert snapshot.failed_requests == 1
+    assert snapshot.timed_out_requests == 1
+    assert snapshot.last_error_type == "TimeoutError"

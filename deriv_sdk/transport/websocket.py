@@ -30,7 +30,14 @@ from websockets.asyncio.client import ClientConnection
 from websockets.exceptions import ConnectionClosed
 
 from deriv_sdk.config import SDKConfig
-from deriv_sdk.exceptions import TimeoutError
+from deriv_sdk.exceptions import (
+    APIError,
+    ClientClosedError,
+    ConnectionError,
+    TimeoutError,
+    TransportError,
+    ValidationError,
+)
 from deriv_sdk.logger import get_logger
 from deriv_sdk.request.registry import RequestRegistry
 from deriv_sdk.transport.heartbeat import Heartbeat
@@ -186,7 +193,12 @@ class WebSocketClient:
 
         for future in self._pending.values():
             if not future.done():
-                future.cancel()
+                future.set_exception(
+                    ClientClosedError(
+                        "Client closed before the request completed.",
+                        code="ClientClosed",
+                    )
+                )
 
         self._registry.clear()
 
@@ -263,20 +275,25 @@ class WebSocketClient:
             url=self._config.websocket_url,
         )
 
-        self._connection = await websockets.connect(
-            self._config.websocket_url,
-        )
+        try:
+            self._connection = await websockets.connect(
+                self._config.websocket_url,
+            )
 
-        self._connected = True
+            self._connected = True
 
-        self._logger.info("Connection established.")
+            self._logger.info("Connection established.")
 
-        await self._heartbeat.start()
+            await self._heartbeat.start()
 
-        self._receiver_task = asyncio.create_task(
-            self.receive(),
-            name="deriv-websocket-receiver",
-        )
+            self._receiver_task = asyncio.create_task(
+                self.receive(),
+                name="deriv-websocket-receiver",
+            )
+        except Exception as exc:
+            self._connected = False
+            await self.disconnect()
+            raise ConnectionError("Unable to connect to Deriv.") from exc
 
     async def disconnect(self) -> None:
         """
@@ -359,7 +376,7 @@ class WebSocketClient:
         connection = self._connection
 
         if connection is None:
-            raise RuntimeError("WebSocket is not connected.")
+            raise ClientClosedError("WebSocket is not connected.", code="NotConnected")
 
         payload = json.dumps(message)
 
@@ -437,7 +454,7 @@ class WebSocketClient:
         msg_type = response.get("msg_type")
 
         if msg_type != expected:
-            raise RuntimeError(
+            raise ValidationError(
                 "Unexpected response type. "
                 f"Expected '{expected}', "
                 f"received '{msg_type}'."
@@ -464,7 +481,11 @@ class WebSocketClient:
                 )
             )
 
-            raise RuntimeError(f"{code}: {error_message}")
+            raise APIError(
+                error_message,
+                code=code,
+                details={"response": self._redact_log_value(response)},
+            )
 
         self._logger.debug(
             "Request completed.",
@@ -561,6 +582,8 @@ class WebSocketClient:
 
         except Exception:
             self._logger.exception("Unexpected receiver failure.")
+            error = TransportError("Receiver failed.", code="ReceiverFailed")
+            self._cancel_pending_with_exception(error)
 
         finally:
             self._connected = False
@@ -569,6 +592,12 @@ class WebSocketClient:
 
             self._logger.info("Receiver stopped.")
             # =====================================================
+
+    def _cancel_pending_with_exception(self, exception: Exception) -> None:
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(exception)
+        self._registry.clear()
 
     # Utilities
     # =====================================================
@@ -586,7 +615,7 @@ class WebSocketClient:
         connection = self._connection
 
         if connection is None:
-            raise RuntimeError("WebSocket is not connected.")
+            raise ClientClosedError("WebSocket is not connected.", code="NotConnected")
 
         await connection.ping()
 
@@ -601,6 +630,10 @@ class WebSocketClient:
         """
 
         await self.disconnect()
+
+    @property
+    def pending_requests(self) -> int:
+        return self._registry.pending
 
     # =====================================================
     # Async Context Manager
