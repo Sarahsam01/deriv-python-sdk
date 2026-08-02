@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 from .constants import DEFAULT_ENVIRONMENT, DEFAULT_TIMEOUT
+from .request.retry_policy import RetryPolicy
+from .resilience.circuit_breaker import CircuitBreaker
 
 load_dotenv()
 
@@ -37,6 +39,13 @@ class SDKConfig:
         Logical environment label, usually ``demo`` or ``live``.
     timeout:
         Default timeout value used by callers that opt into config defaults.
+    retry_policy:
+        Default retry policy for requests that do not provide one explicitly.
+    circuit_breaker:
+        Optional default circuit breaker shared by requests that do not provide
+        one explicitly.
+    shutdown_timeout:
+        Maximum seconds to wait for graceful transport shutdown.
     """
 
     app_id: str = os.getenv("DERIV_APP_ID", "")
@@ -46,6 +55,9 @@ class SDKConfig:
         DEFAULT_ENVIRONMENT,
     )
     timeout: int = DEFAULT_TIMEOUT
+    retry_policy: RetryPolicy | None = None
+    circuit_breaker: CircuitBreaker | None = None
+    shutdown_timeout: float = 10.0
 
     @property
     def websocket_url(self) -> str:

@@ -7,6 +7,17 @@ Python package version: `1.0.0rc1`
 This page lists the public SDK classes and methods intended for application
 code. Internal helpers and private members are intentionally omitted.
 
+## Root Public API
+
+Public package-root imports:
+
+- `from deriv_sdk import DerivClient`
+- `from deriv_sdk import SDKConfig`
+- `from deriv_sdk import __version__`
+
+Internal implementation details should be imported from their documented
+submodules when explicitly needed.
+
 ## `deriv_sdk.DerivClient`
 
 Main SDK entry point.

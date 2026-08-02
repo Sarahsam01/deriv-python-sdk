@@ -1,3 +1,5 @@
+include CHANGELOG.md
+include docs/*.md
 prune tests
 prune .github
 exclude test_*.py

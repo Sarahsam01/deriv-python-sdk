@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -83,6 +84,27 @@ async def test_client_start_and_close_are_idempotent(monkeypatch):
 
     connect.assert_awaited_once()
     close.assert_awaited_once()
+    assert not client.started
+
+
+@pytest.mark.asyncio
+async def test_client_close_clears_started_when_transport_shutdown_times_out(
+    monkeypatch,
+):
+    config = SDKConfig(app_id="1089", api_token="", shutdown_timeout=0.01)
+    client = DerivClient(app_id="ignored", config=config)
+    monkeypatch.setattr(client.transport, "connect", AsyncMock())
+
+    async def never_finishes() -> None:
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(client.transport, "close", never_finishes)
+
+    await client.start()
+
+    with pytest.raises(TimeoutError):
+        await client.close()
+
     assert not client.started
 
 

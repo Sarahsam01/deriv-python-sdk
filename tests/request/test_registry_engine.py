@@ -108,6 +108,45 @@ async def test_request_engine_retry_success():
 
 
 @pytest.mark.asyncio
+async def test_request_engine_uses_default_retry_policy_when_not_overridden():
+    transport = FakeTransport(
+        [
+            DerivTimeoutError("timeout"),
+            {"msg_type": "ping", "ping": "pong"},
+        ]
+    )
+    engine = RequestEngine(
+        transport,  # type: ignore[arg-type]
+        default_retry_policy=RetryPolicy(
+            max_attempts=1,
+            retry_on=(DerivTimeoutError,),
+        ),
+    )
+
+    response = await engine.send({"ping": 1})
+
+    assert response["msg_type"] == "ping"
+    assert len(transport.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_request_engine_per_request_retry_policy_overrides_default():
+    transport = FakeTransport([DerivTimeoutError("timeout")])
+    engine = RequestEngine(
+        transport,  # type: ignore[arg-type]
+        default_retry_policy=RetryPolicy(
+            max_attempts=1,
+            retry_on=(DerivTimeoutError,),
+        ),
+    )
+
+    with pytest.raises(DerivTimeoutError):
+        await engine.send({"ping": 1}, retry_policy=RetryPolicy(max_attempts=0))
+
+    assert len(transport.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_request_engine_retry_exhausted():
     transport = FakeTransport(
         [
@@ -213,6 +252,28 @@ async def test_request_engine_circuit_breaker_rejects_when_open():
 
     with pytest.raises(CircuitOpenError):
         await engine.send({"ping": 1}, circuit_breaker=breaker)
+
+
+@pytest.mark.asyncio
+async def test_request_engine_uses_default_circuit_breaker_and_reports_health():
+    transport = FakeTransport([DerivTimeoutError("one")])
+    breaker = CircuitBreaker(
+        name="requests",
+        failure_threshold=1,
+        recovery_timeout=60,
+    )
+    engine = RequestEngine(
+        transport,  # type: ignore[arg-type]
+        default_circuit_breaker=breaker,
+    )
+
+    with pytest.raises(DerivTimeoutError):
+        await engine.send({"ping": 1})
+
+    health = engine.health_snapshot()
+
+    assert breaker.state is CircuitBreakerState.OPEN
+    assert health.circuit_breaker_states == {"requests": "open"}
 
 
 @pytest.mark.asyncio

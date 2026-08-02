@@ -32,6 +32,8 @@ from deriv_sdk.request.context import RequestContext
 from deriv_sdk.request.id_generator import RequestIdGenerator, UUIDRequestIdGenerator
 from deriv_sdk.request.metrics import HealthSnapshot, RequestMetrics
 from deriv_sdk.request.options import RequestOptions
+from deriv_sdk.request.retry_policy import RetryPolicy
+from deriv_sdk.resilience.circuit_breaker import CircuitBreaker
 from deriv_sdk.transport.websocket import WebSocketClient
 
 
@@ -64,6 +66,8 @@ class RequestEngine:
         transport: WebSocketClient,
         request_id_generator: RequestIdGenerator | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        default_retry_policy: RetryPolicy | None = None,
+        default_circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
 
         self._transport = transport
@@ -71,6 +75,8 @@ class RequestEngine:
         self._pipeline = MiddlewarePipeline()
         self._sleep = sleep
         self._metrics = RequestMetrics()
+        self._default_retry_policy = default_retry_policy
+        self._default_circuit_breaker = default_circuit_breaker
 
         # --------------------------------------------------
         # Default Middleware
@@ -157,6 +163,15 @@ class RequestEngine:
             options=options,
             metadata=metadata,
         )
+
+        if self._default_retry_policy is not None and "retry_policy" not in kwargs:
+            context.options.retry_policy = self._default_retry_policy
+
+        if (
+            self._default_circuit_breaker is not None
+            and "circuit_breaker" not in kwargs
+        ):
+            context.options.circuit_breaker = self._default_circuit_breaker
 
         return context
 
@@ -300,6 +315,10 @@ class RequestEngine:
         """
         metrics = self._metrics.snapshot()
         pending = getattr(self._transport, "pending_requests", 0)
+        circuit_breaker_states = {}
+        if self._default_circuit_breaker is not None:
+            snapshot = self._default_circuit_breaker.snapshot()
+            circuit_breaker_states[snapshot.name] = snapshot.state.value
         return HealthSnapshot(
             connected=self.connected,
             authorized=authorized,
@@ -312,6 +331,7 @@ class RequestEngine:
             retried_requests=metrics.retried_requests,
             timed_out_requests=metrics.timed_out_requests,
             average_latency=metrics.average_latency,
+            circuit_breaker_states=circuit_breaker_states,
             last_successful_request_time=metrics.last_successful_request_time,
             last_error_time=metrics.last_error_time,
             last_error_type=metrics.last_error_type,

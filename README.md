@@ -48,9 +48,9 @@ pip install deriv-sdk
 
 Install from source:
 
-```bash
-git clone https://github.com/your-org/deriv-sdk.git
-cd deriv-sdk
+```powershell
+git clone https://github.com/Sarahsam01/deriv-python-sdk.git
+cd deriv-python-sdk
 python -m venv venv
 venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
@@ -406,6 +406,9 @@ venv\Scripts\python.exe examples\live_smoke_test.py
 
 `DERIV_API_TOKEN` is optional for public market-data checks.
 
+Known live-environment limitation: `active_symbols` may return an empty array
+for some configured app or account environments without an API error.
+
 ## Testing
 
 Run non-live tests:
@@ -445,6 +448,8 @@ venv\Scripts\python.exe -m pytest -m integration -v
 
 - [API Reference](docs/api.md)
 - [Architecture Guide](docs/architecture.md)
+- [Repository](https://github.com/Sarahsam01/deriv-python-sdk)
+- [Issue Tracker](https://github.com/Sarahsam01/deriv-python-sdk/issues)
 
 ## License
 

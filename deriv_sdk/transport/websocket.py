@@ -303,7 +303,12 @@ class WebSocketClient:
         Safe to call multiple times.
         """
 
-        if not self._connected:
+        if (
+            not self._connected
+            and self._connection is None
+            and self._receiver_task is None
+            and self._registry.pending == 0
+        ):
             return
 
         self._connected = False

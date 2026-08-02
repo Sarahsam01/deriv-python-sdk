@@ -19,6 +19,7 @@ Version : 3.2
 
 from __future__ import annotations
 
+import asyncio
 from types import TracebackType
 from typing import Any, cast
 
@@ -90,6 +91,8 @@ class DerivClient:
 
         self._request_engine = RequestEngine(
             self._transport,
+            default_retry_policy=config.retry_policy,
+            default_circuit_breaker=config.circuit_breaker,
         )
 
         # ==================================================
@@ -181,7 +184,7 @@ class DerivClient:
 
         except Exception:
             try:
-                await self._transport.close()
+                await self._close_transport(suppress_timeout=True)
 
             finally:
                 self._started = False
@@ -194,9 +197,31 @@ class DerivClient:
         """
 
         if self._started or self._transport.connected:
-            await self._transport.close()
+            try:
+                await self._close_transport()
+            finally:
+                self._started = False
+
+            return
 
         self._started = False
+
+    async def _close_transport(
+        self,
+        *,
+        suppress_timeout: bool = False,
+    ) -> None:
+        """
+        Close the transport with the configured shutdown timeout.
+        """
+        try:
+            await asyncio.wait_for(
+                self._transport.close(),
+                timeout=self._config.shutdown_timeout,
+            )
+        except TimeoutError:
+            if not suppress_timeout:
+                raise
 
     # ======================================================
     # Async Context Manager
@@ -279,9 +304,15 @@ class DerivClient:
         """
         Return a log-safe snapshot of SDK runtime health.
         """
+        active_subscriptions = 0
+        market = self._services.get("market")
+        if isinstance(market, MarketService):
+            active_subscriptions = market.subscriptions.count
+
         return self._request_engine.health_snapshot(
             started=self.started,
             authorized=self.authorized,
+            active_subscriptions=active_subscriptions,
         )
 
     # ======================================================

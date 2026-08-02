@@ -5,29 +5,39 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "deriv-sdk"
 version = "1.0.0rc1"
-description = "An asynchronous Python SDK for the Deriv WebSocket API."
-readme = "README.md"
+description = "Async Python SDK for the Deriv WebSocket API with typed services, streaming, resilience, and observability."
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.12"
 license = "MIT"
 authors = [
     { name = "Samuel Tripple" }
 ]
+maintainers = [
+    { name = "Sarahsam01" }
+]
 keywords = [
+    "api-client",
+    "asyncio",
     "deriv",
+    "deriv-api",
+    "python",
+    "sdk",
+    "streaming",
     "trading",
     "websocket",
-    "asyncio",
-    "sdk",
-    "python",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 dependencies = [
@@ -47,6 +57,13 @@ dev = [
     "build>=1.2",
     "twine>=5.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Sarahsam01/deriv-python-sdk"
+Repository = "https://github.com/Sarahsam01/deriv-python-sdk"
+Documentation = "https://github.com/Sarahsam01/deriv-python-sdk#readme"
+"Bug Tracker" = "https://github.com/Sarahsam01/deriv-python-sdk/issues"
+Issues = "https://github.com/Sarahsam01/deriv-python-sdk/issues"
 
 [tool.ruff]
 line-length = 88
