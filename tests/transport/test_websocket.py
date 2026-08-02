@@ -11,6 +11,72 @@ from deriv_sdk.exceptions import TimeoutError
 
 
 @pytest.mark.asyncio
+async def test_concurrent_requests(websocket):
+    websocket._connection = AsyncMock()
+    websocket._connected = True
+
+    first = asyncio.create_task(websocket.request({"ping": 1}, expected="ping"))
+    second = asyncio.create_task(websocket.request({"time": 1}, expected="time"))
+
+    await asyncio.sleep(0)
+
+    assert set(websocket._pending) == {1, 2}
+
+    websocket._pending[1].set_result({"req_id": 1, "msg_type": "ping"})
+    websocket._pending[2].set_result({"req_id": 2, "msg_type": "time"})
+
+    assert await first == {"req_id": 1, "msg_type": "ping"}
+    assert await second == {"req_id": 2, "msg_type": "time"}
+    assert websocket._pending == {}
+
+
+@pytest.mark.asyncio
+async def test_disconnect_cancels_pending_requests(websocket):
+    websocket._connection = AsyncMock()
+    websocket._connected = True
+
+    task = asyncio.create_task(websocket.request({"ping": 1}, expected="ping"))
+
+    await asyncio.sleep(0)
+    assert websocket._pending
+
+    websocket._cancel_pending()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert websocket._pending == {}
+
+
+@pytest.mark.asyncio
+async def test_late_response_after_timeout_does_not_crash(websocket):
+    websocket._connection = AsyncMock()
+    websocket._connected = True
+
+    assert not websocket._registry.resolve(
+        999,
+        {"req_id": 999, "msg_type": "ping"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_message_dispatch(websocket):
+    market = AsyncMock()
+    market.dispatch_stream = AsyncMock(return_value=True)
+    websocket.register_market_service(market)
+
+    handled = await websocket._dispatch_stream(
+        {
+            "msg_type": "tick",
+            "subscription": {"id": "abc"},
+        }
+    )
+
+    assert handled
+    market.dispatch_stream.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_request_api_error(websocket):
     websocket._connection = AsyncMock()
     websocket._connected = True

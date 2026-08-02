@@ -32,6 +32,7 @@ from websockets.exceptions import ConnectionClosed
 from deriv_sdk.config import SDKConfig
 from deriv_sdk.exceptions import TimeoutError
 from deriv_sdk.logger import get_logger
+from deriv_sdk.request.registry import RequestRegistry
 from deriv_sdk.transport.heartbeat import Heartbeat
 from deriv_sdk.transport.router import MessageRouter
 
@@ -88,14 +89,12 @@ class WebSocketClient:
 
         self._market: MarketServiceProtocol | None = None
 
-        self._pending: dict[
-            int,
-            asyncio.Future[dict[str, Any]],
-        ] = {}
+        self._registry = RequestRegistry()
+        self._pending = self._registry._pending
 
         self._next_req_id = 1
 
-        self._request_lock = asyncio.Lock()
+        self._req_id_lock = asyncio.Lock()
 
     def __repr__(self) -> str:
         """
@@ -133,6 +132,20 @@ class WebSocketClient:
         """
         return self._router
 
+    @property
+    def config(self) -> SDKConfig:
+        """
+        SDK configuration used by this transport.
+        """
+        return self._config
+
+    @property
+    def logger(self) -> Any:
+        """
+        Transport logger.
+        """
+        return self._logger
+
     # =====================================================
     # Registration
     # =====================================================
@@ -154,16 +167,17 @@ class WebSocketClient:
     # Internal Helpers
     # =====================================================
 
-    def _allocate_req_id(self) -> int:
+    async def _allocate_req_id(self) -> int:
         """
         Allocate a unique request identifier.
         """
 
-        req_id = self._next_req_id
+        async with self._req_id_lock:
+            req_id = self._next_req_id
 
-        self._next_req_id += 1
+            self._next_req_id += 1
 
-        return req_id
+            return req_id
 
     def _cancel_pending(self) -> None:
         """
@@ -174,7 +188,7 @@ class WebSocketClient:
             if not future.done():
                 future.cancel()
 
-        self._pending.clear()
+        self._registry.clear()
 
     async def _dispatch_stream(
         self,
@@ -200,6 +214,34 @@ class WebSocketClient:
             message,
         )
         # =====================================================
+
+    @staticmethod
+    def _redact_log_value(value: object) -> object:
+        """
+        Return a log-safe copy of a transport payload.
+        """
+
+        if isinstance(value, list):
+            return [WebSocketClient._redact_log_value(item) for item in value]
+
+        if not isinstance(value, dict):
+            return value
+
+        sensitive_keys = {
+            "api_token",
+            "authorize",
+            "email",
+            "fullname",
+            "token",
+        }
+
+        redacted: dict[object, object] = {}
+        for key, item in value.items():
+            if isinstance(key, str) and key.lower() in sensitive_keys:
+                redacted[key] = "***"
+            else:
+                redacted[key] = WebSocketClient._redact_log_value(item)
+        return redacted
 
     # Connection Management
     # =====================================================
@@ -325,7 +367,7 @@ class WebSocketClient:
 
         self._logger.debug(
             "Message sent.",
-            payload=message,
+            payload=self._redact_log_value(message),
         )
 
     # =====================================================
@@ -359,39 +401,34 @@ class WebSocketClient:
             API response.
         """
 
-        async with self._request_lock:
-            req_id = self._allocate_req_id()
+        req_id = await self._allocate_req_id()
 
-            request = dict(message)
-            request["req_id"] = req_id
+        request = dict(message)
+        request["req_id"] = req_id
 
-            loop = asyncio.get_running_loop()
+        future = self._registry.register(req_id)
 
-            future: asyncio.Future[dict[str, Any]] = loop.create_future()
+        try:
+            await self.send(request)
 
-            self._pending[req_id] = future
+            response = await asyncio.wait_for(
+                future,
+                timeout=timeout,
+            )
 
-            try:
-                await self.send(request)
+        except builtins.TimeoutError as exc:
+            self._logger.error(
+                "Request timed out.",
+                req_id=req_id,
+                expected=expected,
+            )
 
-                response = await asyncio.wait_for(
-                    future,
-                    timeout=timeout,
-                )
+            raise TimeoutError(
+                f"Timed out waiting for '{expected}'.",
+            ) from exc
 
-            except builtins.TimeoutError as exc:
-                self._logger.error(
-                    "Request timed out.",
-                    req_id=req_id,
-                    expected=expected,
-                )
-
-                raise TimeoutError(
-                    f"Timed out waiting for '{expected}'.",
-                ) from exc
-
-            finally:
-                self._pending.pop(req_id, None)
+        finally:
+            self._registry.unregister(req_id)
 
         #
         # Validate response type
@@ -475,7 +512,7 @@ class WebSocketClient:
 
                 self._logger.debug(
                     "Message received.",
-                    message=message,
+                    message=self._redact_log_value(message),
                 )
 
                 #
@@ -497,10 +534,7 @@ class WebSocketClient:
                 req_id = message.get("req_id")
 
                 if isinstance(req_id, int):
-                    future = self._pending.get(req_id)
-
-                    if future is not None and not future.done():
-                        future.set_result(message)
+                    if self._registry.resolve(req_id, message):
                         continue
 
                 #

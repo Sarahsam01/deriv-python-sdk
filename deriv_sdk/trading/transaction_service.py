@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from deriv_sdk.models.transaction import Transaction
+from deriv_sdk.request.engine import RequestEngine
 from deriv_sdk.trading.base_service import BaseTradingService
 from deriv_sdk.transport.websocket import WebSocketClient
 
@@ -26,7 +27,7 @@ from deriv_sdk.transport.websocket import WebSocketClient
 class TransactionService(BaseTradingService[Transaction]):
     """Service responsible for retrieving transaction information."""
 
-    def __init__(self, websocket: WebSocketClient) -> None:
+    def __init__(self, websocket: WebSocketClient | RequestEngine) -> None:
         super().__init__(websocket)
 
     async def get(self, *, transaction_id: int) -> Transaction:

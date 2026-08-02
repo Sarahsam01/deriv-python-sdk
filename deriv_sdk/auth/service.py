@@ -1,93 +1,78 @@
 """
 ===========================================================
-Deriv SDK
+Deriv Python SDK
 
 Authentication Service
 
 Responsibilities
 ----------------
-• Authorize with Deriv
-• Store authenticated account
-• Expose authorization status
+• Authorize session
+• Retrieve account information
+• Manage authorization state
 
-Version : 1.0.0
+Version : 2.0
 ===========================================================
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
-from deriv_sdk.auth.models import Account, AuthorizeResponse
-from deriv_sdk.transport.messages import AuthorizeRequest
-
-
-class WebSocketProtocol(Protocol):
-    """
-    Protocol describing the websocket interface required by AuthService.
-    """
-
-    async def request(
-        self,
-        message: dict[str, Any],
-        *,
-        expected: str,
-    ) -> dict[str, Any]: ...
+from deriv_sdk.services.base import (
+    BaseService,
+    RequestEngineProtocol,
+    RequestTransportProtocol,
+)
 
 
-class ConfigProtocol(Protocol):
-    """
-    Protocol describing the configuration required by AuthService.
-    """
-
-    api_token: str
-
-
-class AuthService:
+class AuthService(BaseService):
     """
     Authentication service.
     """
 
     def __init__(
         self,
-        websocket: WebSocketProtocol,
-        config: ConfigProtocol,
+        engine: RequestEngineProtocol | RequestTransportProtocol,
     ) -> None:
-        self._websocket = websocket
-        self._config = config
+        super().__init__(engine)
 
         self._authorized = False
-        self._account: Account | None = None
+        self._authorize_response: dict[str, Any] | None = None
 
     @property
     def authorized(self) -> bool:
         """
-        True if authenticated.
+        Whether the session has been authorized.
         """
         return self._authorized
 
     @property
-    def account(self) -> Account | None:
+    def authorize_response(self) -> dict[str, Any] | None:
         """
-        Authenticated account.
+        Raw authorize response.
         """
-        return self._account
+        return self._authorize_response
 
-    async def authorize(self) -> Account:
+    async def authorize(
+        self,
+        token: str,
+    ) -> dict[str, Any]:
         """
-        Authenticate using the configured API token.
+        Authorize the current session.
         """
 
-        message = AuthorizeRequest(self._config.api_token).to_dict()
+        payload = {
+            "authorize": token,
+        }
 
-        response: dict[str, Any] = await self._websocket.request(
-            message,
+        response = await self.request(
+            payload,
             expected="authorize",
+            service_name="auth",
+            endpoint="authorize",
         )
 
-        result = AuthorizeResponse.model_validate(response)
-
         self._authorized = True
-        self._account = result.authorize
+        self._authorize_response = response
 
-        return result.authorize
+        return response

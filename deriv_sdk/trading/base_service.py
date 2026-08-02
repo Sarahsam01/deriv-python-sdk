@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any, Generic, TypeVar
 
+from deriv_sdk.request.engine import RequestEngine
 from deriv_sdk.transport.websocket import WebSocketClient
 
 T = TypeVar("T")
@@ -30,9 +31,9 @@ class BaseTradingService(ABC, Generic[T]):
 
     def __init__(
         self,
-        websocket: WebSocketClient,
+        websocket: WebSocketClient | RequestEngine,
     ) -> None:
-        self._websocket = websocket
+        self._requester = websocket
 
     async def _execute(
         self,
@@ -60,10 +61,16 @@ class BaseTradingService(ABC, Generic[T]):
         if expected is None:
             raise ValueError("'expected' must be provided.")
 
-        response = await self._websocket.request(
-            message=dict(payload),
-            expected=expected,
-        )
+        if isinstance(self._requester, RequestEngine):
+            response = await self._requester.send(
+                dict(payload),
+                expected_msg_type=expected,
+            )
+        else:
+            response = await self._requester.request(
+                message=dict(payload),
+                expected=expected,
+            )
 
         return self._parse_response(response)
 

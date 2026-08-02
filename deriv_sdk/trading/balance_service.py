@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from deriv_sdk.models.balance import Balance
+from deriv_sdk.request.engine import RequestEngine
 from deriv_sdk.trading.base_service import BaseTradingService
 from deriv_sdk.transport.websocket import WebSocketClient
 
@@ -30,7 +31,7 @@ class BalanceService(BaseTradingService[Balance]):
 
     def __init__(
         self,
-        websocket: WebSocketClient,
+        websocket: WebSocketClient | RequestEngine,
     ) -> None:
         super().__init__(websocket)
 

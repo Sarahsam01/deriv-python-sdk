@@ -17,7 +17,7 @@ Version : 3.0.0
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from deriv_sdk.logger import get_logger
 from deriv_sdk.streaming.manager import SubscriptionManager
@@ -38,6 +38,12 @@ class WebSocketProtocol(Protocol):
         expected: str,
     ) -> dict[str, Any]: ...
 
+    async def send(
+        self,
+        payload: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
 
 class TickStream:
     """
@@ -46,7 +52,7 @@ class TickStream:
 
     def __init__(
         self,
-        websocket: WebSocketProtocol,
+        websocket: Any,
         manager: SubscriptionManager,
     ) -> None:
         self._websocket = websocket
@@ -82,10 +88,7 @@ class TickStream:
             symbol=symbol,
         )
 
-        response = await self._websocket.request(
-            payload,
-            expected="tick",
-        )
+        response = await self._send_request(payload, expected="tick")
 
         tick_response = TickResponse.model_validate(response)
 
@@ -114,6 +117,24 @@ class TickStream:
         )
 
         return subscription
+
+    async def _send_request(
+        self,
+        payload: dict[str, Any],
+        *,
+        expected: str,
+    ) -> dict[str, Any]:
+        sender = getattr(self._websocket, "send", None)
+        if callable(sender):
+            response = await sender(
+                payload,
+                expected_msg_type=expected,
+                service_name="market",
+                endpoint="ticks",
+            )
+        else:
+            response = await self._websocket.request(payload, expected=expected)
+        return cast(dict[str, Any], response)
 
     async def dispatch(
         self,

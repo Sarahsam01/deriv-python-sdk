@@ -36,6 +36,12 @@ class WebSocketProtocol(Protocol):
         expected: str,
     ) -> dict[str, Any]: ...
 
+    async def send(
+        self,
+        payload: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
 
 class Subscription(Generic[T]):
     """
@@ -50,7 +56,7 @@ class Subscription(Generic[T]):
     def __init__(
         self,
         subscription_id: str,
-        websocket: WebSocketProtocol,
+        websocket: Any,
     ) -> None:
         self._subscription_id = subscription_id
         self._websocket = websocket
@@ -103,12 +109,19 @@ class Subscription(Generic[T]):
 
         self._closed = True
 
-        await self._websocket.request(
-            {
-                "forget": self._subscription_id,
-            },
-            expected="forget",
-        )
+        payload = {
+            "forget": self._subscription_id,
+        }
+        sender = getattr(self._websocket, "send", None)
+        if callable(sender):
+            await sender(
+                payload,
+                expected_msg_type="forget",
+                service_name="market",
+                endpoint="forget",
+            )
+        else:
+            await self._websocket.request(payload, expected="forget")
 
     def __aiter__(self) -> Self:
         """

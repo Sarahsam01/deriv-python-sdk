@@ -1,6 +1,6 @@
 """
 ===========================================================
-Deriv SDK
+Deriv Python SDK
 
 Market Service
 
@@ -14,13 +14,11 @@ Responsibilities
 • Request validation
 • Response validation
 
-Version : 3.0.0
+Version : 4.0
 ===========================================================
 """
 
 from __future__ import annotations
-
-from typing import Any, Protocol
 
 from deriv_sdk.logger import get_logger
 from deriv_sdk.market.exceptions import MarketError
@@ -42,43 +40,34 @@ from deriv_sdk.market.responses import (
     TicksHistoryResponse,
     TradingTimesResponse,
 )
+from deriv_sdk.services.base import (
+    BaseService,
+    RequestEngineProtocol,
+    RequestTransportProtocol,
+)
 from deriv_sdk.streaming.manager import SubscriptionManager
 from deriv_sdk.streaming.models import Tick
 from deriv_sdk.streaming.subscription import Subscription
 from deriv_sdk.streaming.tick_stream import TickStream
 
 
-class WebSocketProtocol(Protocol):
+class MarketService(BaseService):
     """
-    Protocol describing the websocket interface required by
-    MarketService.
-    """
-
-    async def request(
-        self,
-        message: dict[str, Any],
-        *,
-        expected: str,
-    ) -> dict[str, Any]: ...
-
-
-class MarketService:
-    """
-    Provides access to Deriv market endpoints.
+    High-level service exposing Deriv market endpoints.
     """
 
     def __init__(
         self,
-        websocket: WebSocketProtocol,
+        engine: RequestEngineProtocol | RequestTransportProtocol,
     ) -> None:
-        self._websocket = websocket
+        super().__init__(engine)
 
         self._logger = get_logger(__name__)
 
         self._subscriptions = SubscriptionManager()
 
         self._tick_stream = TickStream(
-            websocket=self._websocket,
+            websocket=self.engine,
             manager=self._subscriptions,
         )
 
@@ -88,16 +77,16 @@ class MarketService:
 
     @staticmethod
     def _raise_market_error(
-        response: dict[str, Any],
+        response: dict,
     ) -> None:
         """
-        Raise MarketError if the API response contains an error.
+        Raise MarketError if the API returned an error.
         """
 
-        if "error" not in response:
-            return
+        error = response.get("error")
 
-        error = response["error"]
+        if error is None:
+            return
 
         raise MarketError(
             f"{error.get('code', 'UnknownError')}: "
@@ -110,6 +99,7 @@ class MarketService:
 
     async def active_symbols(
         self,
+        *,
         brief: bool = True,
     ) -> list[ActiveSymbol]:
         """
@@ -121,13 +111,15 @@ class MarketService:
         ).to_dict()
 
         self._logger.debug(
-            "Sending active_symbols request.",
+            "Requesting active symbols.",
             payload=payload,
         )
 
-        response = await self._websocket.request(
+        response = await self.request(
             payload,
             expected="active_symbols",
+            service_name="market",
+            endpoint="active_symbols",
         )
 
         self._raise_market_error(response)
@@ -142,7 +134,7 @@ class MarketService:
         return result.active_symbols
 
     # =====================================================
-    # Historical Market Data
+    # Historical Data
     # =====================================================
 
     async def ticks_history(
@@ -169,18 +161,24 @@ class MarketService:
         ).to_dict()
 
         self._logger.debug(
-            "Sending ticks_history request.",
+            "Requesting tick history.",
             payload=payload,
         )
 
-        response = await self._websocket.request(
+        expected = "candles" if style == "candles" else "history"
+
+        response = await self.request(
             payload,
-            expected="history",
+            expected=expected,
+            service_name="market",
+            endpoint="ticks_history",
         )
 
         self._raise_market_error(response)
 
-        result = TicksHistoryResponse.parse_history(response)
+        result = TicksHistoryResponse.parse_history(
+            response,
+        )
 
         if isinstance(result, TickHistory):
             self._logger.info(
@@ -211,16 +209,28 @@ class MarketService:
             date=date,
         ).to_dict()
 
-        response = await self._websocket.request(
+        self._logger.debug(
+            "Requesting trading times.",
+            payload=payload,
+        )
+
+        response = await self.request(
             payload,
             expected="trading_times",
+            service_name="market",
+            endpoint="trading_times",
         )
 
         self._raise_market_error(response)
 
-        data = response.get("trading_times", response)
+        data = response.get(
+            "trading_times",
+            response,
+        )
 
-        result = TradingTimesResponse.model_validate(data)
+        result = TradingTimesResponse.model_validate(
+            data,
+        )
 
         self._logger.info(
             "Retrieved trading times.",
@@ -241,7 +251,7 @@ class MarketService:
         product_type: str = "basic",
     ) -> ContractsFor:
         """
-        Retrieve available contracts for a market symbol.
+        Retrieve available contracts for a symbol.
         """
 
         payload = ContractsForRequest(
@@ -250,19 +260,31 @@ class MarketService:
             product_type=product_type,
         ).to_dict()
 
-        response = await self._websocket.request(
+        self._logger.debug(
+            "Requesting contracts.",
+            payload=payload,
+        )
+
+        response = await self.request(
             payload,
             expected="contracts_for",
+            service_name="market",
+            endpoint="contracts_for",
         )
 
         self._raise_market_error(response)
 
-        data = response.get("contracts_for", response)
+        data = response.get(
+            "contracts_for",
+            response,
+        )
 
-        result = ContractsForResponse.model_validate(data)
+        result = ContractsForResponse.model_validate(
+            data,
+        )
 
         self._logger.info(
-            "Retrieved available contracts.",
+            "Retrieved contracts.",
             count=result.count,
         )
 
@@ -277,7 +299,7 @@ class MarketService:
         symbol: str,
     ) -> Subscription[Tick]:
         """
-        Subscribe to live market ticks.
+        Subscribe to live ticks.
         """
 
         return await self._tick_stream.subscribe(
@@ -286,21 +308,23 @@ class MarketService:
 
     async def dispatch_stream(
         self,
-        message: dict[str, Any],
+        message: dict,
     ) -> bool:
         """
-        Dispatch streaming messages.
+        Dispatch an incoming streaming message.
 
         Returns
         -------
         bool
-            True if the message was handled.
+            True if the message was processed.
         """
 
         if message.get("msg_type") != "tick":
             return False
 
-        return await self._tick_stream.dispatch(message)
+        return await self._tick_stream.dispatch(
+            message,
+        )
 
     # =====================================================
     # Properties
@@ -311,5 +335,11 @@ class MarketService:
         """
         Active subscription manager.
         """
-
         return self._subscriptions
+
+    @property
+    def tick_stream(self) -> TickStream:
+        """
+        Tick stream manager.
+        """
+        return self._tick_stream

@@ -23,6 +23,7 @@ from typing import Any
 
 from deriv_sdk.models.proposal import Proposal
 from deriv_sdk.proposal_builder.models import Proposal as ProposalRequest
+from deriv_sdk.request.engine import RequestEngine
 from deriv_sdk.trading.base_service import BaseTradingService
 from deriv_sdk.transport.websocket import WebSocketClient
 
@@ -35,7 +36,7 @@ class ProposalService(BaseTradingService[Proposal]):
 
     def __init__(
         self,
-        websocket: WebSocketClient,
+        websocket: WebSocketClient | RequestEngine,
     ) -> None:
         super().__init__(websocket)
 

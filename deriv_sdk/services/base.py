@@ -2,13 +2,14 @@
 ===========================================================
 Deriv Python SDK
 
-Market Base Service
+Base Service
 
 Responsibilities
 ----------------
-• Base class for all market data services
-• Provide access to the shared Request Engine
-• Centralize market request execution
+• Base class for all SDK services
+• Provide access to the Request Engine
+• Expose shared configuration and logger
+• Centralize request/subscription helpers
 
 Version : 2.0
 ===========================================================
@@ -17,21 +18,35 @@ Version : 2.0
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 from deriv_sdk.config import SDKConfig
 from deriv_sdk.request.engine import RequestEngine
-from deriv_sdk.services.base import RequestEngineProtocol, RequestTransportProtocol
 from deriv_sdk.transport.websocket import WebSocketClient
 
 
-class MarketBaseService:
-    """
-    Base class for all market-related services.
+@runtime_checkable
+class RequestEngineProtocol(Protocol):
+    async def send(self, payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]: ...
 
-    All market requests are executed through the shared
-    RequestEngine rather than communicating directly with
-    the WebSocket transport.
+    async def subscribe(
+        self, payload: dict[str, Any], **kwargs: Any
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class RequestTransportProtocol(Protocol):
+    async def request(
+        self,
+        payload: dict[str, Any],
+        *,
+        expected: str,
+    ) -> dict[str, Any]: ...
+
+
+class BaseService:
+    """
+    Base class for all SDK services.
     """
 
     def __init__(
@@ -43,17 +58,14 @@ class MarketBaseService:
     @property
     def engine(self) -> RequestEngineProtocol | RequestTransportProtocol:
         """
-        Shared Request Engine.
+        Shared request engine.
         """
         return self._engine
 
     @property
     def transport(self) -> WebSocketClient | RequestTransportProtocol | Any:
         """
-        Shared WebSocket transport.
-
-        Exposed for advanced scenarios where direct access
-        to the transport is required.
+        Shared transport (read-only access).
         """
         if isinstance(self._engine, RequestEngine):
             return self._engine.transport
@@ -81,8 +93,7 @@ class MarketBaseService:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
-        Execute a market request through the shared
-        Request Engine.
+        Send a request through the Request Engine.
         """
         if isinstance(self._engine, RequestEngine):
             return await self._engine.send(
@@ -103,8 +114,7 @@ class MarketBaseService:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
-        Execute a market subscription through the shared
-        Request Engine.
+        Send a subscription request through the Request Engine.
         """
         if isinstance(self._engine, RequestEngine):
             return await self._engine.subscribe(

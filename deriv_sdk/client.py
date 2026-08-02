@@ -1,202 +1,329 @@
 """
 ===========================================================
-Deriv SDK
+Deriv Python SDK
 
-Client
+High-Level Client
 
-Main SDK entry point.
+Responsibilities
+----------------
+• Own SDK configuration
+• Create transport
+• Create Request Engine
+• Create and manage services
+• Manage SDK lifecycle
+• Expose a simple, high-level API
 
-Version : 1.0.0
+Version : 3.2
 ===========================================================
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from types import TracebackType
+from typing import Any, cast
 
-from .auth.models import Account
-from .config import SDKConfig
-from .version import __version__
+from deriv_sdk.auth.service import AuthService
+from deriv_sdk.config import SDKConfig
+from deriv_sdk.market.service import MarketService
+from deriv_sdk.request.engine import RequestEngine
+from deriv_sdk.trading.balance_service import BalanceService
+from deriv_sdk.trading.buy_service import BuyService
+from deriv_sdk.trading.contract_service import ContractService
+from deriv_sdk.trading.proposal_service import ProposalService
+from deriv_sdk.trading.transaction_service import TransactionService
+from deriv_sdk.transport.websocket import WebSocketClient
 
-if TYPE_CHECKING:
-    from .auth.service import AuthService
-    from .market.service import MarketService
-    from .trading.buy_service import BuyService
-    from .trading.contract_service import ContractService
-    from .trading.proposal_service import ProposalService
-    from .transport.websocket import WebSocketClient
 
-
-@dataclass(slots=True)
 class DerivClient:
     """
-    Main entry point for the Deriv SDK.
+    High-level SDK client.
 
-    This class owns the WebSocket connection and exposes all
-    SDK services through a single interface.
+    This is the main entry point for the SDK.
+
+    Example
+    -------
+    >>> client = DerivClient(
+    ...     app_id="1089",
+    ...     api_token="YOUR_TOKEN",
+    ... )
+    ...
+    >>> await client.start()
+    >>> symbols = await client.market.active_symbols()
+    >>> await client.close()
     """
 
-    config: SDKConfig = field(default_factory=SDKConfig)
-
-    #
-    # Transport
-    #
-
-    websocket: WebSocketClient = field(init=False)
-
-    #
-    # Core services
-    #
-
-    auth: AuthService = field(init=False)
-    market: MarketService = field(init=False)
-
-    #
-    # Trading services
-    #
-
-    proposal: ProposalService = field(init=False)
-    buy: BuyService = field(init=False)
-    contract: ContractService = field(init=False)
-
-    def __post_init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        app_id: str,
+        api_token: str | None = None,
+        config: SDKConfig | None = None,
+    ) -> None:
         """
-        Initialize the SDK transport layer and all services.
+        Initialize the SDK.
+
+        No network activity occurs here.
         """
 
-        #
-        # Deferred imports prevent circular dependencies.
-        #
+        # ==================================================
+        # Configuration
+        # ==================================================
 
-        from .auth.service import AuthService
-        from .market.service import MarketService
-        from .trading.buy_service import BuyService
-        from .trading.contract_service import ContractService
-        from .trading.proposal_service import ProposalService
-        from .transport.websocket import WebSocketClient
+        if config is None:
+            config = SDKConfig(
+                app_id=app_id,
+                api_token=api_token or "",
+            )
 
-        #
+        self._config = config
+
+        # ==================================================
         # Transport
-        #
+        # ==================================================
 
-        self.websocket = WebSocketClient(self.config)
+        self._transport = WebSocketClient(config)
 
-        #
-        # Core services
-        #
+        # ==================================================
+        # Request Engine
+        # ==================================================
 
-        self.auth = AuthService(
-            websocket=self.websocket,
-            config=self.config,
+        self._request_engine = RequestEngine(
+            self._transport,
         )
 
-        self.market = MarketService(
-            websocket=self.websocket,
+        # ==================================================
+        # Service Registry
+        # ==================================================
+
+        self._services: dict[str, Any] = {}
+
+        self._register_service(
+            "auth",
+            AuthService(self._request_engine),
         )
 
-        #
-        # Trading services
-        #
+        market = MarketService(self._request_engine)
+        self._register_service("market", market)
+        self._transport.register_market_service(market)
 
-        self.proposal = ProposalService(
-            websocket=self.websocket,
-        )
+        self._register_service("proposal", ProposalService(self._request_engine))
+        self._register_service("buy", BuyService(self._request_engine))
+        self._register_service("balance", BalanceService(self._request_engine))
+        self._register_service("contract", ContractService(self._request_engine))
+        self._register_service("transaction", TransactionService(self._request_engine))
 
-        self.buy = BuyService(
-            websocket=self.websocket,
-        )
+        # ==================================================
+        # Client State
+        # ==================================================
 
-        self.contract = ContractService(
-            websocket=self.websocket,
-        )
+        self._started = False
 
-        #
-        # Register streaming callbacks
-        #
+    # ======================================================
+    # Service Registry
+    # ======================================================
 
-        self.websocket.register_market_service(
-            self.market,
-        )
+    def _register_service(
+        self,
+        name: str,
+        service: Any,
+    ) -> None:
+        """
+        Register a service.
+        """
 
-    @property
-    def version(self) -> str:
-        """
-        SDK version.
-        """
-        return __version__
+        if name in self._services:
+            raise ValueError(f"Service '{name}' is already registered.")
 
-    @property
-    def connected(self) -> bool:
-        """
-        Whether the WebSocket connection is active.
-        """
-        return self.websocket.connected
+        self._services[name] = service
 
-    @property
-    def authorized(self) -> bool:
+    def _service(
+        self,
+        name: str,
+    ) -> Any:
         """
-        Whether the client has been authenticated.
+        Retrieve a registered service.
         """
-        return self.auth.authorized
 
-    async def connect(self) -> None:
-        """
-        Connect to the Deriv WebSocket API.
-        """
-        await self.websocket.connect()
+        try:
+            return self._services[name]
 
-    async def disconnect(self) -> None:
-        """
-        Disconnect from the Deriv WebSocket API.
-        """
-        await self.websocket.disconnect()
+        except KeyError as exc:
+            raise AttributeError(f"Service '{name}' is not registered.") from exc
 
-    async def authorize(self) -> Account:
-        """
-        Authenticate using the configured API token.
+    # ======================================================
+    # Lifecycle
+    # ======================================================
 
-        Returns
-        -------
-        Account
-            The authenticated Deriv account.
+    async def start(self) -> None:
         """
-        return await self.auth.authorize()
+        Start the SDK.
+
+        Steps
+        -----
+        1. Connect
+        2. Authorize
+        3. Ready
+        """
+
+        if self._started:
+            return
+
+        try:
+            await self._transport.connect()
+
+            if self._config.api_token:
+                await self.auth.authorize(
+                    self._config.api_token,
+                )
+
+            self._started = True
+
+        except Exception:
+            try:
+                await self._transport.close()
+
+            finally:
+                self._started = False
+
+            raise
 
     async def close(self) -> None:
         """
-        Close the SDK client.
-
-        This is an alias for :meth:`disconnect`.
+        Gracefully shut down the SDK.
         """
-        await self.disconnect()
+
+        if self._started or self._transport.connected:
+            await self._transport.close()
+
+        self._started = False
+
+    # ======================================================
+    # Async Context Manager
+    # ======================================================
 
     async def __aenter__(self) -> DerivClient:
-        """
-        Support asynchronous context management.
-        """
-        await self.connect()
+        await self.start()
         return self
 
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
-        tb: object | None,
+        tb: TracebackType | None,
     ) -> None:
-        """
-        Ensure the connection is closed when leaving an
-        async context manager.
-        """
         await self.close()
 
+    # ======================================================
+    # Properties
+    # ======================================================
+
+    @property
+    def config(self) -> SDKConfig:
+        """
+        SDK configuration.
+        """
+        return self._config
+
+    @property
+    def transport(self) -> WebSocketClient:
+        """
+        Shared WebSocket transport.
+        """
+        return self._transport
+
+    @property
+    def request_engine(self) -> RequestEngine:
+        """
+        Shared Request Engine.
+
+        All SDK services communicate through
+        this engine.
+        """
+        return self._request_engine
+
+    @property
+    def started(self) -> bool:
+        """
+        Whether the SDK has been started.
+        """
+        return self._started
+
+    @property
+    def connected(self) -> bool:
+        """
+        Whether the transport is connected.
+        """
+        return self._transport.connected
+
+    @property
+    def authorized(self) -> bool:
+        """
+        Whether the session has been authorized.
+        """
+        return self.auth.authorized
+
+    # ======================================================
+    # Services
+    # ======================================================
+
+    @property
+    def auth(self) -> AuthService:
+        """
+        Authentication service.
+        """
+        return cast(AuthService, self._service("auth"))
+
+    @property
+    def market(self) -> MarketService:
+        """
+        Market service.
+        """
+        return cast(MarketService, self._service("market"))
+
+    @property
+    def proposal(self) -> ProposalService:
+        """
+        Proposal service.
+        """
+        return cast(ProposalService, self._service("proposal"))
+
+    @property
+    def buy(self) -> BuyService:
+        """
+        Buy service.
+        """
+        return cast(BuyService, self._service("buy"))
+
+    @property
+    def balance(self) -> BalanceService:
+        """
+        Balance service.
+        """
+        return cast(BalanceService, self._service("balance"))
+
+    @property
+    def contract(self) -> ContractService:
+        """
+        Contract service.
+        """
+        return cast(ContractService, self._service("contract"))
+
+    @property
+    def transaction(self) -> TransactionService:
+        """
+        Transaction service.
+        """
+        return cast(TransactionService, self._service("transaction"))
+
+    # ======================================================
+    # Representation
+    # ======================================================
+
     def __repr__(self) -> str:
-        """
-        Developer-friendly representation.
-        """
         return (
             f"{self.__class__.__name__}("
-            f"version='{self.version}', "
+            f"started={self.started}, "
             f"connected={self.connected}, "
-            f"authorized={self.authorized})"
+            f"authorized={self.authorized}"
+            f")"
         )
