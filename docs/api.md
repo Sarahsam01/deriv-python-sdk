@@ -1,8 +1,8 @@
 # API Reference
 
-Release candidate tag: `v1.0.0-rc1`
+Stable release tag: `v1.0.0`
 
-Python package version: `1.0.0rc1`
+Python package version: `1.0.0`
 
 This page lists the public SDK classes and methods intended for application
 code. Internal helpers and private members are intentionally omitted.
@@ -126,7 +126,7 @@ This places a contract purchase. Use only when you explicitly intend to trade.
 
 - `await get(*, transaction_id: int) -> Transaction`
 
-Portfolio and profit table services are not public services in `v1.0.0-rc1`.
+Portfolio and profit table services are not public services in `v1.0.0`.
 
 ## `RequestEngine`
 

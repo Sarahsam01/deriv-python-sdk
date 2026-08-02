@@ -1,8 +1,8 @@
 # Deriv Python SDK
 
-Release candidate tag: `v1.0.0-rc1`
+Stable release tag: `v1.0.0`
 
-Python package version: `1.0.0rc1`
+Python package version: `1.0.0`
 
 The Deriv Python SDK is an asynchronous Python client for the Deriv WebSocket
 API. It provides a high-level `DerivClient`, typed market and trading models,
@@ -183,8 +183,8 @@ finally:
 
 ## Trading Services
 
-The release candidate exposes safe wrappers for proposal, buy, balance,
-contract, and transaction requests.
+The stable release exposes safe wrappers for proposal, buy, balance, contract,
+and transaction requests.
 
 Proposal quote, which does not place a trade:
 
@@ -229,7 +229,7 @@ Transaction details:
 transaction = await client.transaction.get(transaction_id=123456789)
 ```
 
-Portfolio and profit table services are not exposed as public `v1.0.0-rc1`
+Portfolio and profit table services are not exposed as public `v1.0.0`
 service APIs. Use only documented public services unless a future release adds
 those endpoints.
 

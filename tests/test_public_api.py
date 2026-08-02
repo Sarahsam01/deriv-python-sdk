@@ -6,4 +6,4 @@ def test_root_public_api_exports_client_config_and_version():
     client = DerivClient(app_id="ignored", config=config)
 
     assert client.config is config
-    assert __version__ == "1.0.0rc1"
+    assert __version__ == "1.0.0"

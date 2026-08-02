@@ -1,8 +1,14 @@
 # Release Checklist
 
-Git release-candidate tag: `v1.0.0-rc1`
+Git stable release tag: `v1.0.0`
 
-Python package version: `1.0.0rc1`
+Python package version: `1.0.0`
+
+Release-candidate history:
+
+- TestPyPI upload completed for `1.0.0rc1`.
+- Fresh TestPyPI install completed for `1.0.0rc1`.
+- Release-candidate tag: `v1.0.0-rc1`.
 
 ## Pre-release
 
@@ -36,14 +42,14 @@ Python package version: `1.0.0rc1`
 
 ## Release
 
-- Change `1.0.0rc1` to `1.0.0`.
+- Change `1.0.0rc1` to `1.0.0`. Completed; pending final verification.
 - Commit the release.
 - Create an annotated `v1.0.0` tag.
 - Push the branch and tag.
-- Upload to TestPyPI first.
-- Install from TestPyPI in a clean environment.
-- Upload to PyPI.
-- Create the GitHub Release.
+- Upload to TestPyPI first. Completed for `1.0.0rc1`.
+- Install from TestPyPI in a clean environment. Completed for `1.0.0rc1`.
+- Upload to PyPI. Not yet completed.
+- Create the GitHub Release. Not yet created.
 
 ## Post-release
 

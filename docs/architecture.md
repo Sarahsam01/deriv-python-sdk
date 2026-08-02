@@ -1,8 +1,8 @@
 # Architecture Guide
 
-Release candidate tag: `v1.0.0-rc1`
+Stable release tag: `v1.0.0`
 
-Python package version: `1.0.0rc1`
+Python package version: `1.0.0`
 
 ## Overview
 
