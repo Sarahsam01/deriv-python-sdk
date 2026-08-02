@@ -101,6 +101,8 @@ class MarketService(BaseService):
         self,
         *,
         brief: bool = True,
+        product_type: str | None = "basic",
+        landing_company_short: str | None = None,
     ) -> list[ActiveSymbol]:
         """
         Retrieve active trading symbols.
@@ -108,6 +110,8 @@ class MarketService(BaseService):
 
         payload = ActiveSymbolsRequest(
             brief=brief,
+            product_type=product_type,
+            landing_company_short=landing_company_short,
         ).to_dict()
 
         self._logger.debug(

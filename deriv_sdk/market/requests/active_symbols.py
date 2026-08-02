@@ -28,12 +28,19 @@ class ActiveSymbolsRequest(BaseModel):
     )
 
     brief: bool = True
+    product_type: str | None = "basic"
+    landing_company_short: str | None = None
 
     def to_dict(self) -> dict:
         """
         Convert request to Deriv API payload.
         """
 
-        return {
+        payload = {
             "active_symbols": "brief" if self.brief else "full",
         }
+        if self.product_type is not None:
+            payload["product_type"] = self.product_type
+        if self.landing_company_short is not None:
+            payload["landing_company_short"] = self.landing_company_short
+        return payload

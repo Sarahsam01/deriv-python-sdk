@@ -34,6 +34,7 @@ classifiers = [
 dependencies = [
     "websockets>=16.0",
     "pydantic>=2.11",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

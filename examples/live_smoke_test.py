@@ -8,6 +8,10 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def _required_app_id() -> str:
     app_id = os.getenv("DERIV_APP_ID", "").strip()

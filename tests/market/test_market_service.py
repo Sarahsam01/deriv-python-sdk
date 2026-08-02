@@ -15,6 +15,7 @@ from deriv_sdk.market.models import (
     CandleHistory,
     TickHistory,
 )
+from deriv_sdk.market.requests import ActiveSymbolsRequest
 from deriv_sdk.market.service import MarketService
 
 
@@ -67,7 +68,70 @@ async def test_active_symbols_success():
 
     assert ws.last_expected == "active_symbols"
 
-    assert ws.last_payload == {"active_symbols": "brief"}
+    assert ws.last_payload == {
+        "active_symbols": "brief",
+        "product_type": "basic",
+    }
+
+
+def test_active_symbols_request_defaults():
+    request = ActiveSymbolsRequest()
+
+    assert request.to_dict() == {
+        "active_symbols": "brief",
+        "product_type": "basic",
+    }
+
+
+def test_active_symbols_request_full():
+    request = ActiveSymbolsRequest(brief=False)
+
+    assert request.to_dict() == {
+        "active_symbols": "full",
+        "product_type": "basic",
+    }
+
+
+def test_active_symbols_request_omits_none_fields():
+    request = ActiveSymbolsRequest(
+        product_type=None,
+        landing_company_short=None,
+    )
+
+    assert request.to_dict() == {"active_symbols": "brief"}
+
+
+def test_active_symbols_request_landing_company():
+    request = ActiveSymbolsRequest(
+        product_type="basic",
+        landing_company_short="svg",
+    )
+
+    assert request.to_dict() == {
+        "active_symbols": "brief",
+        "product_type": "basic",
+        "landing_company_short": "svg",
+    }
+
+
+@pytest.mark.asyncio
+async def test_active_symbols_service_options():
+    response = {"active_symbols": []}
+    ws = MockWebSocket(response)
+    service = MarketService(ws)
+
+    result = await service.active_symbols(
+        brief=False,
+        product_type="basic",
+        landing_company_short="svg",
+    )
+
+    assert result == []
+    assert ws.last_payload == {
+        "active_symbols": "full",
+        "product_type": "basic",
+        "landing_company_short": "svg",
+    }
 
 
 # ==========================================================
